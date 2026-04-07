@@ -1,0 +1,65 @@
+2026-04-07 17:52:24.198 INFO (MainThread) [music_assistant] Starting Music Assistant Server (8248ec3e5e8d40a4ad35a314b5bc04b3) version 2.8.0.dev2026022305 - HA add-on: False - Safe mode: False
+2026-04-07 17:52:24.213 INFO (MainThread) [music_assistant.cache] Initializing cache controller...
+2026-04-07 17:52:24.250 INFO (MainThread) [ffmpeg] Detected ffmpeg version 7.1.2 with libsoxr support
+2026-04-07 17:52:24.250 WARNING (MainThread) [music_assistant.streams] 
+
+################################################################################
+Starting streamserver on  172.23.0.2:8097
+This is the IP address that is communicated to players.
+If this is incorrect, audio will not play!
+See the documentation how to configure the publish IP for the Streamserver
+in Settings --> Core modules --> Streamserver
+################################################################################
+
+2026-04-07 17:52:25.001 INFO (MainThread) [music_assistant.auth] Generated new JWT secret key
+2026-04-07 17:52:25.002 INFO (MainThread) [music_assistant.auth] Authentication manager initialized (providers=1)
+2026-04-07 17:52:25.003 WARNING (MainThread) [music_assistant.webserver] 
+
+################################################################################
+###                           SETUP REQUIRED                                 ###
+################################################################################
+
+Music Assistant is running in setup mode.
+Please complete the setup by visiting:
+
+    http://172.23.0.2:8095/setup
+
+################################################################################
+
+2026-04-07 17:52:25.608 INFO (MainThread) [music_assistant] Loaded metadata provider The Audio DB
+2026-04-07 17:52:25.614 INFO (MainThread) [music_assistant] Loaded metadata provider LRCLIB
+2026-04-07 17:52:25.615 INFO (MainThread) [music_assistant] Loaded player provider Sync Group Player
+2026-04-07 17:52:25.617 INFO (MainThread) [music_assistant] Loaded music provider Music Assistant
+2026-04-07 17:52:25.618 INFO (MainThread) [music_assistant] Loaded player provider Universal Player
+2026-04-07 17:52:25.623 INFO (MainThread) [music_assistant] Loaded metadata provider MusicBrainz
+2026-04-07 17:52:25.628 INFO (MainThread) [music_assistant] Loaded metadata provider fanart.tv
+2026-04-07 17:52:25.679 INFO (MainThread) [music_assistant] Loaded player provider Sendspin
+2026-04-07 17:52:25.680 INFO (MainThread) [aiosendspin.server.server] Starting Sendspin server on port 8927
+2026-04-07 17:52:25.689 INFO (MainThread) [aiosendspin.server.server] Sendspin server started successfully on 0.0.0.0:8927
+2026-04-07 17:52:27.169 WARNING (ThreadPoolExecutor-0_6) [py.warnings] /app/venv/lib/python3.13/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (6.0.0.post1)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+
+2026-04-07 17:52:27.389 INFO (MainThread) [music_assistant] Loaded player provider Chromecast
+2026-04-07 17:52:27.397 INFO (MainThread) [music_assistant] Loaded player provider DLNA
+2026-04-07 17:52:28.567 INFO (MainThread) [music_assistant] Loaded player provider AirPlay
+2026-04-07 17:52:35.652 INFO (MainThread) [music_assistant.music] Sync task for Music Assistant/tracks completed
+2026-04-07 17:52:35.660 INFO (MainThread) [music_assistant.music.genre] Genre mapping scan completed: 0 items mapped (0.0s)
+2026-04-07 17:52:35.830 INFO (MainThread) [music_assistant.music] Sync task for Music Assistant/playlists completed
+2026-04-07 17:52:35.860 INFO (MainThread) [music_assistant.music] Sync task for Music Assistant/radios completed
+2026-04-07 17:52:35.868 INFO (MainThread) [music_assistant.music.genre] Genre mapping scan completed: 0 items mapped (0.0s)
+2026-04-07 18:24:34.693 INFO (MainThread) [music_assistant.auth] Migrated existing playlog entries to first user: L6ZSjQOqKlamVlZ_i7-l1kH3vDHTFbn9MsUCEN4OxHU
+2026-04-07 18:24:34.783 INFO (MainThread) [music_assistant.webserver] First admin user created: admin
+2026-04-07 18:24:35.423 INFO (MainThread) [music_assistant.webserver] WebSocket client authenticated as admin
+2026-04-07 18:24:38.532 INFO (MainThread) [music_assistant.players] Player (type player) registered: ma_gie3w5fo68/Web (Chrome on Mac)
+2026-04-07 18:26:24.775 INFO (MainThread) [music_assistant.players] Player unavailable: Web (Chrome on Mac)
+2026-04-07 18:26:43.079 WARNING (MainThread) [aiorun] Stopping the loop
+2026-04-07 18:26:43.080 INFO (MainThread) [aiorun] Entering shutdown phase.
+2026-04-07 18:26:43.080 INFO (MainThread) [aiorun] Executing provided shutdown_callback.
+2026-04-07 18:26:43.080 INFO (MainThread) [root] shutdown requested!
+2026-04-07 18:26:43.080 INFO (MainThread) [music_assistant] Stop called, cleaning up...
+2026-04-07 18:26:43.250 INFO (MainThread) [aiorun] Cancelling pending tasks.
+2026-04-07 18:26:43.251 INFO (MainThread) [aiorun] Running pending tasks till complete
+2026-04-07 18:26:43.251 INFO (MainThread) [aiorun] Waiting for executor shutdown.
+2026-04-07 18:26:43.264 INFO (MainThread) [aiorun] Shutting down async generators
+2026-04-07 18:26:43.264 INFO (MainThread) [aiorun] Closing the loop.
+2026-04-07 18:26:43.264 INFO (MainThread) [aiorun] Leaving. Bye!

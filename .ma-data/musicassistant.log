@@ -1,0 +1,58 @@
+2026-04-07 18:26:55.613 INFO (MainThread) [music_assistant] Starting Music Assistant Server (8248ec3e5e8d40a4ad35a314b5bc04b3) version 2.9.0b5 - HA add-on: False - Safe mode: False
+2026-04-07 18:26:55.630 INFO (MainThread) [music_assistant.cache] Initializing cache controller...
+2026-04-07 18:26:55.660 INFO (MainThread) [ffmpeg] Detected ffmpeg version 7.1.2 with libsoxr support
+2026-04-07 18:26:55.660 WARNING (MainThread) [music_assistant.streams] 
+
+################################################################################
+Starting streamserver on  172.24.0.2:8097
+This is the IP address that is communicated to players.
+If this is incorrect, audio will not play!
+See the documentation how to configure the publish IP for the Streamserver
+in Settings --> Core modules --> Streamserver
+################################################################################
+
+2026-04-07 18:26:55.705 INFO (MainThread) [music_assistant.music] Migrating database from version 27 to 36
+2026-04-07 18:26:55.763 INFO (MainThread) [music_assistant.music] Genre migration - unique names query:
+SELECT DISTINCT TRIM(g.value) AS raw_name FROM tracks, json_each(json_extract(tracks.metadata, '$.genres')) AS g WHERE json_extract(tracks.metadata, '$.genres') IS NOT NULL AND json_extract(tracks.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM albums, json_each(json_extract(albums.metadata, '$.genres')) AS g WHERE json_extract(albums.metadata, '$.genres') IS NOT NULL AND json_extract(albums.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM artists, json_each(json_extract(artists.metadata, '$.genres')) AS g WHERE json_extract(artists.metadata, '$.genres') IS NOT NULL AND json_extract(artists.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM playlists, json_each(json_extract(playlists.metadata, '$.genres')) AS g WHERE json_extract(playlists.metadata, '$.genres') IS NOT NULL AND json_extract(playlists.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM radios, json_each(json_extract(radios.metadata, '$.genres')) AS g WHERE json_extract(radios.metadata, '$.genres') IS NOT NULL AND json_extract(radios.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM audiobooks, json_each(json_extract(audiobooks.metadata, '$.genres')) AS g WHERE json_extract(audiobooks.metadata, '$.genres') IS NOT NULL AND json_extract(audiobooks.metadata, '$.genres') != '[]' UNION SELECT DISTINCT TRIM(g.value) AS raw_name FROM podcasts, json_each(json_extract(podcasts.metadata, '$.genres')) AS g WHERE json_extract(podcasts.metadata, '$.genres') IS NOT NULL AND json_extract(podcasts.metadata, '$.genres') != '[]'
+2026-04-07 18:26:55.765 INFO (MainThread) [music_assistant.music] Genre migration - discovered 0 unique genre names
+2026-04-07 18:26:55.766 INFO (MainThread) [music_assistant.music] Genre migration - resolved 0 unique genre names
+2026-04-07 18:26:55.815 INFO (MainThread) [music_assistant.cache] Clearing database...
+2026-04-07 18:26:55.830 INFO (MainThread) [music_assistant.cache] Clearing database DONE
+2026-04-07 18:26:56.087 WARNING (MainThread) [music_assistant.auth] Performing database migration from schema version 4 to 5
+2026-04-07 18:26:56.087 INFO (MainThread) [music_assistant.auth] Migrating auth database from version 4 to 5
+2026-04-07 18:26:56.094 INFO (MainThread) [music_assistant.auth] Authentication manager initialized (providers=1)
+2026-04-07 18:26:56.095 INFO (MainThread) [music_assistant.webserver] 
+################################################################################
+
+Webserver available on: http://172.24.0.2:8095
+
+If this address is incorrect, see the documentation on how to configure
+the Webserver in Settings --> Core modules --> Webserver
+
+################################################################################
+
+2026-04-07 18:26:58.742 INFO (MainThread) [music_assistant] Loaded metadata provider fanart.tv
+2026-04-07 18:26:58.742 INFO (MainThread) [music_assistant] Loaded metadata provider The Audio DB
+2026-04-07 18:26:58.743 INFO (MainThread) [music_assistant] Loaded metadata provider LRCLIB
+2026-04-07 18:26:58.743 INFO (MainThread) [music_assistant] Loaded music provider Music Assistant
+2026-04-07 18:26:58.755 INFO (MainThread) [music_assistant] Loaded player provider Sync Group Player
+2026-04-07 18:26:58.758 INFO (MainThread) [music_assistant] Loaded metadata provider MusicBrainz
+2026-04-07 18:26:58.772 INFO (MainThread) [music_assistant] Loaded metadata provider Cover Art Archive
+2026-04-07 18:26:58.784 INFO (MainThread) [music_assistant] Loaded player provider Universal Player
+2026-04-07 18:26:58.823 INFO (MainThread) [music_assistant] Loaded player provider Sendspin
+2026-04-07 18:26:58.824 INFO (MainThread) [aiosendspin.server.server] Starting Sendspin server on port 8927
+2026-04-07 18:26:58.852 INFO (MainThread) [aiosendspin.server.server] Sendspin server started successfully on 0.0.0.0:8927
+2026-04-07 18:26:59.187 INFO (MainThread) [music_assistant] Loaded player provider Local Audio Out
+2026-04-07 18:26:59.196 INFO (MainThread) [music_assistant.local_audio.bridge_manager] No local audio output devices found
+2026-04-07 18:26:59.225 INFO (MainThread) [music_assistant.local_audio.bridge_manager] No local audio output devices found
+2026-04-07 18:26:59.341 INFO (MainThread) [music_assistant] Loaded plugin provider Party
+2026-04-07 18:26:59.349 INFO (MainThread) [music_assistant] Loaded player provider Chromecast
+2026-04-07 18:26:59.380 INFO (MainThread) [music_assistant] Loaded player provider DLNA
+2026-04-07 18:27:00.569 INFO (MainThread) [music_assistant] Loaded player provider AirPlay
+2026-04-07 18:27:08.893 INFO (MainThread) [music_assistant.music.genre] Genre mapping scan completed: 0 items mapped (0.0s)
+2026-04-07 18:27:10.760 INFO (MainThread) [music_assistant.webserver] WebSocket client authenticated as admin
+2026-04-07 18:27:11.129 WARNING (MainThread) [music_assistant.webserver] Invalid command: music/synctasks
+2026-04-07 18:27:23.405 INFO (MainThread) [music_assistant.webserver] WebSocket client authenticated as admin
+2026-04-07 18:27:26.471 INFO (MainThread) [music_assistant.players] Player (type player) registered: ma_gie3w5fo68/Web (Chrome on Mac)
+2026-04-07 18:27:42.173 ERROR (MainThread) [music_assistant.webserver] Error handling message: config/providers/save: cannot import name 'ProviderFeature' from 'music_assistant.models' (/app/venv/lib/python3.13/site-packages/music_assistant/models/__init__.py)
+2026-04-07 18:27:58.726 INFO (MainThread) [music_assistant.Music Assistant] Playlist migration completed with 0 errors

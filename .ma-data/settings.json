@@ -1,0 +1,374 @@
+{
+  "server_id": "8248ec3e5e8d40a4ad35a314b5bc04b3",
+  "providers": {
+    "theaudiodb": {
+      "values": {},
+      "type": "metadata",
+      "domain": "theaudiodb",
+      "instance_id": "theaudiodb",
+      "enabled": true,
+      "name": "The Audio DB",
+      "default_name": "The Audio DB",
+      "last_error": null
+    },
+    "builtin": {
+      "values": {},
+      "type": "music",
+      "domain": "builtin",
+      "instance_id": "builtin",
+      "enabled": true,
+      "name": "Music Assistant",
+      "default_name": "Music Assistant",
+      "last_error": null
+    },
+    "sendspin": {
+      "values": {},
+      "type": "player",
+      "domain": "sendspin",
+      "instance_id": "sendspin",
+      "enabled": true,
+      "name": "Sendspin",
+      "default_name": "Sendspin",
+      "last_error": null
+    },
+    "sync_group": {
+      "values": {},
+      "type": "player",
+      "domain": "sync_group",
+      "instance_id": "sync_group",
+      "enabled": true,
+      "name": "Sync Group Player",
+      "default_name": "Sync Group Player",
+      "last_error": null
+    },
+    "universal_player": {
+      "values": {},
+      "type": "player",
+      "domain": "universal_player",
+      "instance_id": "universal_player",
+      "enabled": true,
+      "name": "Universal Player",
+      "default_name": "Universal Player",
+      "last_error": null
+    },
+    "fanarttv": {
+      "values": {},
+      "type": "metadata",
+      "domain": "fanarttv",
+      "instance_id": "fanarttv",
+      "enabled": true,
+      "name": "fanart.tv",
+      "default_name": "fanart.tv",
+      "last_error": null
+    },
+    "musicbrainz": {
+      "values": {},
+      "type": "metadata",
+      "domain": "musicbrainz",
+      "instance_id": "musicbrainz",
+      "enabled": true,
+      "name": "MusicBrainz",
+      "default_name": "MusicBrainz",
+      "last_error": null
+    },
+    "lrclib": {
+      "values": {},
+      "type": "metadata",
+      "domain": "lrclib",
+      "instance_id": "lrclib",
+      "enabled": true,
+      "name": "LRCLIB",
+      "default_name": "LRCLIB",
+      "last_error": null
+    },
+    "dlna": {
+      "values": {},
+      "type": "player",
+      "domain": "dlna",
+      "instance_id": "dlna",
+      "enabled": true,
+      "name": "DLNA",
+      "default_name": "DLNA",
+      "last_error": null
+    },
+    "chromecast": {
+      "values": {},
+      "type": "player",
+      "domain": "chromecast",
+      "instance_id": "chromecast",
+      "enabled": true,
+      "name": "Chromecast",
+      "default_name": "Chromecast",
+      "last_error": null
+    },
+    "airplay": {
+      "values": {},
+      "type": "player",
+      "domain": "airplay",
+      "instance_id": "airplay",
+      "enabled": true,
+      "name": "AirPlay",
+      "default_name": "AirPlay",
+      "last_error": null
+    },
+    "local_audio": {
+      "values": {},
+      "type": "player",
+      "domain": "local_audio",
+      "instance_id": "local_audio",
+      "enabled": true,
+      "name": "Local Audio Out",
+      "default_name": "Local Audio Out",
+      "last_error": null
+    },
+    "coverartarchive": {
+      "values": {},
+      "type": "metadata",
+      "domain": "coverartarchive",
+      "instance_id": "coverartarchive",
+      "enabled": true,
+      "name": "Cover Art Archive",
+      "default_name": "Cover Art Archive",
+      "last_error": null
+    },
+    "party": {
+      "values": {},
+      "type": "plugin",
+      "domain": "party",
+      "instance_id": "party",
+      "enabled": true,
+      "name": "Party",
+      "default_name": "Party",
+      "last_error": null
+    }
+  },
+  "default_providers_setup": [
+    "airplay",
+    "party",
+    "chromecast",
+    "dlna"
+  ],
+  "core": {
+    "metadata": {
+      "values": {
+        "language": "en_GB"
+      },
+      "domain": "metadata",
+      "last_error": null
+    },
+    "discovery": {
+      "domain": "discovery",
+      "values": {}
+    },
+    "tasks": {
+      "scheduled_task_states": {
+        "fix_group_member_configs": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:55.634465+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "weekly",
+            "enabled": true,
+            "days_of_week": [
+              0
+            ],
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "cache_database_cleanup": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:56.045933+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "music_database_cleanup": {
+          "status": "success",
+          "last_run": "2026-04-07T18:27:08.878264+00:00",
+          "last_run_user_id": null,
+          "finished_at": "2026-04-07T18:27:08.892361+00:00",
+          "updated_at": "2026-04-07T18:27:08.892383+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 5,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "music_provider_mapping_correction": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:56.046251+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 30,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "genre_mapping_scan": {
+          "status": "success",
+          "last_run": "2026-04-07T18:27:08.878645+00:00",
+          "last_run_user_id": null,
+          "finished_at": "2026-04-07T18:27:08.893427+00:00",
+          "updated_at": "2026-04-07T18:27:08.893444+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "metadata_missing_artist_artwork_scan": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:56.046432+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "metadata_playlist_metadata_scan": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:56.046504+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "metadata_thumb_cache_cleanup": {
+          "status": "idle",
+          "last_run": null,
+          "last_run_user_id": null,
+          "finished_at": null,
+          "updated_at": "2026-04-07T18:26:56.046572+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "daily",
+            "enabled": true,
+            "every": 1,
+            "hour": 4,
+            "minute": 0
+          },
+          "schedule_enabled": true
+        },
+        "music_sync_builtin_track": {
+          "status": "success",
+          "last_run": "2026-04-07T18:27:08.760857+00:00",
+          "last_run_user_id": null,
+          "finished_at": "2026-04-07T18:27:08.777630+00:00",
+          "updated_at": "2026-04-07T18:27:08.777650+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "hourly",
+            "enabled": true,
+            "every": 3
+          },
+          "schedule_enabled": true
+        },
+        "music_sync_builtin_playlist": {
+          "status": "success",
+          "last_run": "2026-04-07T18:27:08.771362+00:00",
+          "last_run_user_id": null,
+          "finished_at": "2026-04-07T18:27:08.869353+00:00",
+          "updated_at": "2026-04-07T18:27:08.869372+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "hourly",
+            "enabled": true,
+            "every": 3
+          },
+          "schedule_enabled": true
+        },
+        "music_sync_builtin_radio": {
+          "status": "success",
+          "last_run": "2026-04-07T18:27:08.787737+00:00",
+          "last_run_user_id": null,
+          "finished_at": "2026-04-07T18:27:08.877823+00:00",
+          "updated_at": "2026-04-07T18:27:08.877838+00:00",
+          "last_error": null,
+          "failure_count": 0,
+          "failure_messages": [],
+          "schedule": {
+            "type": "hourly",
+            "enabled": true,
+            "every": 3
+          },
+          "schedule_enabled": true
+        }
+      }
+    }
+  },
+  "players": {
+    "ma_gie3w5fo68": {
+      "values": {},
+      "provider": "sendspin",
+      "player_id": "ma_gie3w5fo68",
+      "enabled": true,
+      "name": null,
+      "default_name": "Web (Chrome on Mac)",
+      "player_type": "player",
+      "available": true
+    }
+  }
+}
