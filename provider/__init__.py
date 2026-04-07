@@ -44,8 +44,6 @@ if TYPE_CHECKING:
     from music_assistant.mass import MusicAssistant
     from music_assistant.models import ProviderModuleType
 
-    from .provider import DLNAReceiverProvider
-
 
 async def get_config_entries(
     mass: MusicAssistant,  # noqa: ARG001

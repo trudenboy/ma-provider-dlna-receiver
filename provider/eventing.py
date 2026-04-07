@@ -11,7 +11,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from time import monotonic
-from typing import Any
 from xml.sax.saxutils import escape
 
 import aiohttp
@@ -178,21 +177,25 @@ class EventingManager:
 
         for url in sub.callback_urls:
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.request(
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.request(
                         "NOTIFY",
                         url,
                         headers=headers,
                         data=xml_body,
                         timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp:
-                        if resp.status >= 300:
-                            LOGGER.warning(
-                                "NOTIFY to %s returned %s", url, resp.status
-                            )
-                        else:
-                            LOGGER.debug("NOTIFY sent to %s (SEQ=%d)", url, sub.seq - 1)
-                        return  # success on first working callback
+                    ) as resp,
+                ):
+                    if resp.status >= 300:
+                        LOGGER.warning(
+                            "NOTIFY to %s returned %s",
+                            url,
+                            resp.status,
+                        )
+                    else:
+                        LOGGER.debug("NOTIFY sent to %s (SEQ=%d)", url, sub.seq - 1)
+                    return  # success on first working callback
             except Exception:
                 LOGGER.debug("NOTIFY to %s failed, trying next callback", url)
 
@@ -242,9 +245,7 @@ class EventingManager:
         """Periodically remove expired subscriptions."""
         while True:
             await asyncio.sleep(60)
-            expired = [
-                sid for sid, sub in self._subscriptions.items() if sub.is_expired
-            ]
+            expired = [sid for sid, sub in self._subscriptions.items() if sub.is_expired]
             for sid in expired:
                 self._subscriptions.pop(sid, None)
                 LOGGER.debug("Cleaned up expired subscription: %s", sid)

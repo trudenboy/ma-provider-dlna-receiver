@@ -14,14 +14,15 @@ import logging
 import socket
 import uuid
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from music_assistant.models import PluginProvider, ProviderFeature
 from music_assistant_models.config_entries import ConfigValueType
 from music_assistant_models.enums import ContentType
 from music_assistant_models.media_items import AudioFormat
 from music_assistant_models.plugin import PluginSource
+
+from music_assistant.models import PluginProvider, ProviderFeature
 
 from .constants import (
     CONF_BIND_IP,
@@ -82,9 +83,9 @@ class DLNAReceiverProvider(PluginProvider):
     # ------------------------------------------------------------------
 
     async def loaded_in_mass(self) -> None:
-        """Called when the provider is loaded in Music Assistant."""
+        """Initialize renderer instances when loaded in Music Assistant."""
         friendly_prefix = str(
-            self._config.get(CONF_FRIENDLY_NAME, DEFAULT_FRIENDLY_NAME)
+            self._config.get(CONF_FRIENDLY_NAME, DEFAULT_FRIENDLY_NAME),
         )
         bind_ip = str(self._config.get(CONF_BIND_IP, "")) or self._detect_ip()
         base_port = int(self._config.get(CONF_HTTP_PORT, DEFAULT_HTTP_PORT))
@@ -165,8 +166,8 @@ class DLNAReceiverProvider(PluginProvider):
         )
 
         # Wire SOAP callbacks bound to this instance
-        renderer.on_set_av_transport_uri = (
-            lambda uri, meta: self._on_set_transport_uri(inst, uri, meta)
+        renderer.on_set_av_transport_uri = lambda uri, meta: self._on_set_transport_uri(
+            inst, uri, meta
         )
         renderer.on_play = lambda: self._on_play(inst)
         renderer.on_pause = lambda: self._on_pause(inst)
@@ -223,10 +224,7 @@ class DLNAReceiverProvider(PluginProvider):
         """Get all MA players as (player_id, display_name) pairs."""
         try:
             players = self.mass.players.all
-            return [
-                (p.player_id, p.display_name or p.name or p.player_id)
-                for p in players
-            ]
+            return [(p.player_id, p.display_name or p.name or p.player_id) for p in players]
         except Exception:
             LOGGER.warning("Could not enumerate MA players")
             return []
@@ -259,15 +257,15 @@ class DLNAReceiverProvider(PluginProvider):
 
         if not stream_url:
             LOGGER.warning(
-                "get_audio_stream(%s) called but no stream URL set", player_id
+                "get_audio_stream(%s) called but no stream URL set",
+                player_id,
             )
             return
 
         LOGGER.info("Proxying DLNA stream for %s: %s", player_id, stream_url)
-        async with aiohttp.ClientSession() as session:
-            async with session.get(stream_url) as resp:
-                async for chunk in resp.content.iter_any():
-                    yield chunk
+        async with aiohttp.ClientSession() as session, session.get(stream_url) as resp:
+            async for chunk in resp.content.iter_any():
+                yield chunk
         LOGGER.info("DLNA stream ended for %s", player_id)
 
     # ------------------------------------------------------------------
@@ -275,7 +273,10 @@ class DLNAReceiverProvider(PluginProvider):
     # ------------------------------------------------------------------
 
     async def _on_set_transport_uri(
-        self, inst: RendererInstance, uri: str, metadata: str | None
+        self,
+        inst: RendererInstance,
+        uri: str,
+        metadata: str | None,
     ) -> None:
         """Handle SetAVTransportURI for a specific renderer instance."""
         LOGGER.info(

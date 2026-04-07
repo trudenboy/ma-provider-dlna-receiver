@@ -29,7 +29,7 @@ def test_subscribe_custom_timeout(manager: EventingManager) -> None:
 
 def test_subscribe_multiple_callbacks(manager: EventingManager) -> None:
     sid, _ = manager.subscribe(
-        "<http://host1:8080/cb><http://host2:8080/cb>"
+        "<http://host1:8080/cb><http://host2:8080/cb>",
     )
     sub = manager._subscriptions[sid]
     assert len(sub.callback_urls) == 2
@@ -64,7 +64,7 @@ def test_renew_unknown_raises(manager: EventingManager) -> None:
 
 def test_parse_callback_header() -> None:
     urls = EventingManager._parse_callback_header(
-        "<http://192.168.1.5:8080/event><http://10.0.0.1:9000/ev>"
+        "<http://192.168.1.5:8080/event><http://10.0.0.1:9000/ev>",
     )
     assert urls == ["http://192.168.1.5:8080/event", "http://10.0.0.1:9000/ev"]
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-from typing import TYPE_CHECKING
 
 from .constants import (
     SSDP_MAX_AGE,
@@ -16,9 +15,6 @@ from .constants import (
     UPNP_SERVICE_CONNECTION_MANAGER,
     UPNP_SERVICE_RENDERING_CONTROL,
 )
-
-if TYPE_CHECKING:
-    pass
 
 LOGGER = logging.getLogger(__name__)
 

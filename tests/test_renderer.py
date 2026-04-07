@@ -132,7 +132,7 @@ async def test_play_pause_stop(client: TestClient, renderer: UPnPRenderer) -> No
         headers={
             "SOAPACTION": '"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"',
         },
-        data='<CurrentURI>http://example.com/stream.flac</CurrentURI>',
+        data="<CurrentURI>http://example.com/stream.flac</CurrentURI>",
     )
     assert resp.status == 200
     assert renderer.current_uri == "http://example.com/stream.flac"
@@ -202,7 +202,9 @@ async def test_get_connection_info(client: TestClient) -> None:
     resp = await client.post(
         "/ConnectionManager/control",
         headers={
-            "SOAPACTION": '"urn:schemas-upnp-org:service:ConnectionManager:1#GetCurrentConnectionInfo"',
+            "SOAPACTION": (
+                '"urn:schemas-upnp-org:service:ConnectionManager:1#GetCurrentConnectionInfo"'
+            ),
         },
         data="<ConnectionID>0</ConnectionID>",
     )

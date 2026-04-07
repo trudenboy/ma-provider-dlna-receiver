@@ -2,8 +2,8 @@
 # conftest.py — make provider/ importable as music_assistant.providers.dlna_receiver
 import importlib
 import pathlib
-import types
 import sys
+import types
 
 _repo = pathlib.Path(__file__).resolve().parent
 

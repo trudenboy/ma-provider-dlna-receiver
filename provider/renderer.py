@@ -22,7 +22,6 @@ from .constants import (
     TRANSPORT_STATE_PAUSED,
     TRANSPORT_STATE_PLAYING,
     TRANSPORT_STATE_STOPPED,
-    TRANSPORT_STATE_TRANSITIONING,
     UPNP_DEVICE_TYPE,
     UPNP_SERVICE_AV_TRANSPORT,
     UPNP_SERVICE_CONNECTION_MANAGER,
@@ -80,7 +79,8 @@ class UPnPRenderer:
         self._app.router.add_get("/description.xml", self._handle_description)
         # SCPD routes
         self._app.router.add_get(
-            "/AVTransport/description.xml", self._handle_av_transport_scpd
+            "/AVTransport/description.xml",
+            self._handle_av_transport_scpd,
         )
         self._app.router.add_get(
             "/RenderingControl/description.xml",
@@ -93,17 +93,23 @@ class UPnPRenderer:
         # SOAP control routes
         self._app.router.add_post("/AVTransport/control", self._handle_av_transport)
         self._app.router.add_post(
-            "/RenderingControl/control", self._handle_rendering_control
+            "/RenderingControl/control",
+            self._handle_rendering_control,
         )
         self._app.router.add_post(
-            "/ConnectionManager/control", self._handle_connection_manager
+            "/ConnectionManager/control",
+            self._handle_connection_manager,
         )
         # GENA event subscription routes
         self._app.router.add_route(
-            "SUBSCRIBE", "/AVTransport/event", self._handle_subscribe_av_transport
+            "SUBSCRIBE",
+            "/AVTransport/event",
+            self._handle_subscribe_av_transport,
         )
         self._app.router.add_route(
-            "UNSUBSCRIBE", "/AVTransport/event", self._handle_unsubscribe_av_transport
+            "UNSUBSCRIBE",
+            "/AVTransport/event",
+            self._handle_unsubscribe_av_transport,
         )
         self._app.router.add_route(
             "SUBSCRIBE",
@@ -176,9 +182,7 @@ class UPnPRenderer:
         SubElement(device, "friendlyName").text = self.friendly_name
         SubElement(device, "manufacturer").text = "Music Assistant"
         SubElement(device, "modelName").text = "DLNA Receiver"
-        SubElement(device, "modelDescription").text = (
-            "Music Assistant DLNA Receiver Bridge"
-        )
+        SubElement(device, "modelDescription").text = "Music Assistant DLNA Receiver Bridge"
         SubElement(device, "UDN").text = self.udn
 
         service_list = SubElement(device, "serviceList")
@@ -224,13 +228,15 @@ class UPnPRenderer:
         return self._serve_scpd("AVTransport.xml")
 
     async def _handle_rendering_control_scpd(
-        self, _request: web.Request
+        self,
+        _request: web.Request,
     ) -> web.Response:
         """Return RenderingControl service description."""
         return self._serve_scpd("RenderingControl.xml")
 
     async def _handle_connection_manager_scpd(
-        self, _request: web.Request
+        self,
+        _request: web.Request,
     ) -> web.Response:
         """Return ConnectionManager service description."""
         return self._serve_scpd("ConnectionManager.xml")
@@ -360,7 +366,8 @@ class UPnPRenderer:
                     await self.on_set_volume(self.volume)
                 await self._notify_rendering_control_change()
             return self._soap_response(
-                action_name, UPNP_SERVICE_RENDERING_CONTROL
+                action_name,
+                UPNP_SERVICE_RENDERING_CONTROL,
             )
 
         if action_name == "GetMute":
@@ -378,7 +385,8 @@ class UPnPRenderer:
                     await self.on_set_mute(self.mute)
                 await self._notify_rendering_control_change()
             return self._soap_response(
-                action_name, UPNP_SERVICE_RENDERING_CONTROL
+                action_name,
+                UPNP_SERVICE_RENDERING_CONTROL,
             )
 
         LOGGER.warning("Unhandled RenderingControl action: %s", action_name)
@@ -391,9 +399,7 @@ class UPnPRenderer:
         LOGGER.debug("ConnectionManager action: %s", action_name)
 
         if action_name == "GetProtocolInfo":
-            sink_protocols = ",".join(
-                f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES
-            )
+            sink_protocols = ",".join(f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES)
             return self._soap_response(
                 action_name,
                 UPNP_SERVICE_CONNECTION_MANAGER,
@@ -408,9 +414,7 @@ class UPnPRenderer:
             )
 
         if action_name == "GetCurrentConnectionInfo":
-            sink_protocols = ",".join(
-                f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES
-            )
+            sink_protocols = ",".join(f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES)
             return self._soap_response(
                 action_name,
                 UPNP_SERVICE_CONNECTION_MANAGER,
@@ -493,51 +497,61 @@ class UPnPRenderer:
     # ------------------------------------------------------------------
 
     async def _handle_subscribe_av_transport(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle SUBSCRIBE for AVTransport events."""
         return await self._handle_subscribe(
-            request, self._evt_av_transport, self._get_av_transport_vars()
+            request,
+            self._evt_av_transport,
+            self._get_av_transport_vars(),
         )
 
     async def _handle_unsubscribe_av_transport(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle UNSUBSCRIBE for AVTransport events."""
         return self._handle_unsubscribe(request, self._evt_av_transport)
 
     async def _handle_subscribe_rendering_control(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle SUBSCRIBE for RenderingControl events."""
         return await self._handle_subscribe(
-            request, self._evt_rendering_control, self._get_rendering_control_vars()
+            request,
+            self._evt_rendering_control,
+            self._get_rendering_control_vars(),
         )
 
     async def _handle_unsubscribe_rendering_control(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle UNSUBSCRIBE for RenderingControl events."""
         return self._handle_unsubscribe(request, self._evt_rendering_control)
 
     async def _handle_subscribe_connection_manager(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle SUBSCRIBE for ConnectionManager events."""
-        sink_protocols = ",".join(
-            f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES
-        )
+        sink_protocols = ",".join(f"http-get:*:{mime}:*" for mime in SUPPORTED_MIME_TYPES)
         initial_vars = {
             "SourceProtocolInfo": "",
             "SinkProtocolInfo": sink_protocols,
             "CurrentConnectionIDs": "0",
         }
         return await self._handle_subscribe(
-            request, self._evt_connection_manager, initial_vars
+            request,
+            self._evt_connection_manager,
+            initial_vars,
         )
 
     async def _handle_unsubscribe_connection_manager(
-        self, request: web.Request
+        self,
+        request: web.Request,
     ) -> web.Response:
         """Handle UNSUBSCRIBE for ConnectionManager events."""
         return self._handle_unsubscribe(request, self._evt_connection_manager)
@@ -548,14 +562,15 @@ class UPnPRenderer:
         manager: EventingManager,
         initial_vars: dict[str, str],
     ) -> web.Response:
-        """Generic SUBSCRIBE handler for any UPnP service."""
+        """Handle SUBSCRIBE requests for a UPnP service."""
         sid = request.headers.get("SID")
 
         if sid:
             # Renewal
             try:
                 timeout = manager.renew(
-                    sid, request.headers.get("TIMEOUT")
+                    sid,
+                    request.headers.get("TIMEOUT"),
                 )
             except KeyError:
                 return web.Response(status=412, text="Invalid SID")
@@ -574,7 +589,8 @@ class UPnPRenderer:
 
         try:
             sid, timeout = manager.subscribe(
-                callback, request.headers.get("TIMEOUT")
+                callback,
+                request.headers.get("TIMEOUT"),
             )
         except ValueError as exc:
             return web.Response(status=412, text=str(exc))
@@ -596,7 +612,7 @@ class UPnPRenderer:
         request: web.Request,
         manager: EventingManager,
     ) -> web.Response:
-        """Generic UNSUBSCRIBE handler for any UPnP service."""
+        """Handle UNSUBSCRIBE requests for a UPnP service."""
         sid = request.headers.get("SID")
         if not sid:
             return web.Response(status=412, text="Missing SID header")
@@ -642,7 +658,7 @@ class UPnPRenderer:
     async def _notify_rendering_control_change(self) -> None:
         """Notify RenderingControl subscribers of state changes."""
         await self._evt_rendering_control.notify(
-            self._get_rendering_control_vars()
+            self._get_rendering_control_vars(),
         )
 
     @staticmethod
@@ -666,9 +682,5 @@ class UPnPRenderer:
             parts.append(f"<{name} {attrs}/>")
 
         return (
-            f'<Event xmlns="{namespace}">'
-            f'<InstanceID val="0">'
-            f"{''.join(parts)}"
-            f"</InstanceID>"
-            f"</Event>"
+            f'<Event xmlns="{namespace}"><InstanceID val="0">{"".join(parts)}</InstanceID></Event>'
         )
