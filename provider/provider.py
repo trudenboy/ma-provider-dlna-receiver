@@ -17,6 +17,7 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
+from html import unescape
 from typing import TYPE_CHECKING
 
 import defusedxml.ElementTree as DefusedET
@@ -358,11 +359,11 @@ class DLNAReceiverProvider(PluginProvider):
             )
             return
 
-        LOGGER.info("Proxying DLNA stream for %s: %s", player_id, stream_url)
+        LOGGER.debug("Proxying DLNA stream for %s: %s", player_id, stream_url)
         async with aiohttp.ClientSession() as session, session.get(stream_url) as resp:
             async for chunk in resp.content.iter_any():
                 yield chunk
-        LOGGER.info("DLNA stream ended for %s", player_id)
+        LOGGER.debug("DLNA stream ended for %s", player_id)
 
     # ------------------------------------------------------------------
     # DIDL-Lite metadata parsing
@@ -382,8 +383,6 @@ class DLNAReceiverProvider(PluginProvider):
             return result
 
         # SOAP bodies may contain XML-escaped DIDL-Lite content
-        from html import unescape
-
         metadata = unescape(metadata)
 
         try:
@@ -461,7 +460,7 @@ class DLNAReceiverProvider(PluginProvider):
 
         LOGGER.info("Starting playback on player %s", target)
         meta = inst.current_metadata or {}
-        LOGGER.info("DIDL metadata for %s: %s", target, meta)
+        LOGGER.debug("DIDL metadata for %s: %s", target, meta)
         duration = self._parse_duration(meta.get("duration"))
 
         # Update plugin source metadata for MA UI display
@@ -581,7 +580,7 @@ class DLNAReceiverProvider(PluginProvider):
                 if self._active_player_id:
                     player = self.mass.players.get_player(self._active_player_id)
                     if not player:
-                        LOGGER.info("Metadata loop: player %s gone", self._active_player_id)
+                        LOGGER.debug("Metadata loop: player %s gone", self._active_player_id)
                         self._clear_playback_state()
                         break
 
@@ -591,7 +590,7 @@ class DLNAReceiverProvider(PluginProvider):
         except asyncio.CancelledError:
             pass
         except Exception:
-            LOGGER.info("Metadata update loop error", exc_info=True)
+            LOGGER.debug("Metadata update loop error", exc_info=True)
 
     # ------------------------------------------------------------------
     # Helpers
