@@ -14,9 +14,8 @@ import argparse
 import asyncio
 import logging
 import signal
-import uuid
-
 import sys
+import uuid
 from pathlib import Path
 
 # Add project root to path so we can import the provider package
@@ -59,6 +58,7 @@ async def _on_set_mute(mute: bool) -> None:
 
 
 async def main(name: str, bind_ip: str, port: int) -> None:
+    """Run a standalone DLNA renderer for integration testing."""
     udn = f"uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'ma-dlna-standalone-{name}')}"
 
     renderer = UPnPRenderer(
