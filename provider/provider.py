@@ -245,6 +245,14 @@ class DLNAReceiverProvider(PluginProvider):
     # PluginProvider audio source interface
     # ------------------------------------------------------------------
 
+    def get_source(self) -> PluginSource:
+        """Return the plugin source descriptor for this DLNA receiver."""
+        return PluginSource(
+            id=self.instance_id,
+            name=self.name or "DLNA Receiver",
+            passive=True,
+        )
+
     async def get_audio_stream(
         self,
         player_id: str,
