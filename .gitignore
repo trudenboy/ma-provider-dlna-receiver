@@ -34,3 +34,4 @@ ma-server/
 htmlcov/
 .mypy_cache/
 .ma-data/
+.playwright-mcp/
