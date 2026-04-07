@@ -9,7 +9,7 @@ echo "==> Setting up DLNA Receiver provider..."
 PROVIDERS_DIR=$(/app/venv/bin/python3 -c \
     "import music_assistant.providers, os; print(os.path.dirname(music_assistant.providers.__file__))")
 
-# Remove any existing provider, then symlink ours
+# Remove any existing yandex_music provider (image may bundle one), then symlink ours
 rm -rf "${PROVIDERS_DIR}/dlna_receiver"
 ln -s /tmp/provider "${PROVIDERS_DIR}/dlna_receiver"
 echo "==> Provider linked: ${PROVIDERS_DIR}/dlna_receiver"
