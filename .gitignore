@@ -33,3 +33,4 @@ ma-server/
 .coverage
 htmlcov/
 .mypy_cache/
+.ma-data/
