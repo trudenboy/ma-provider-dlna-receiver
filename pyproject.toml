@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ma-provider-dlna-receiver"
+version = "0.0.1"
+description = "Music Assistant plugin provider — DLNA/UPnP MediaRenderer bridge"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.12"
+authors = [
+    {name = "trudenboy"},
+]
+dependencies = [
+    "music_assistant",
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+include = ["provider*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+follow_imports = "normal"
+ignore_missing_imports = true
