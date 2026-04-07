@@ -18,6 +18,7 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import defusedxml.ElementTree as DefusedET
 from music_assistant_models.config_entries import ConfigValueType  # noqa: F401
 from music_assistant_models.enums import ProviderFeature
 
@@ -56,6 +57,7 @@ class RendererInstance:
     renderer: UPnPRenderer
     ssdp: SSDPAdvertiser
     current_stream_url: str | None = None
+    current_metadata: dict[str, str | None] | None = None
     plugin_source: PluginSource | None = None
 
 
@@ -296,6 +298,58 @@ class DLNAReceiverProvider(PluginProvider):
         LOGGER.info("DLNA stream ended for %s", player_id)
 
     # ------------------------------------------------------------------
+    # DIDL-Lite metadata parsing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_didl_metadata(metadata: str | None) -> dict[str, str | None]:
+        """Parse DIDL-Lite XML and extract title, artist, album, image_url."""
+        result: dict[str, str | None] = {
+            "title": None,
+            "artist": None,
+            "album": None,
+            "image_url": None,
+        }
+        if not metadata:
+            return result
+
+        try:
+            root = DefusedET.fromstring(metadata)
+        except Exception:
+            LOGGER.debug("Failed to parse DIDL-Lite metadata")
+            return result
+
+        ns = {
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "upnp": "urn:schemas-upnp-org:metadata-1-0/upnp/",
+            "didl": "urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/",
+        }
+
+        item = root.find("didl:item", ns)
+        if item is None:
+            item = root
+
+        title_el = item.find("dc:title", ns)
+        if title_el is not None and title_el.text:
+            result["title"] = title_el.text
+
+        artist_el = item.find("upnp:artist", ns)
+        if artist_el is None:
+            artist_el = item.find("dc:creator", ns)
+        if artist_el is not None and artist_el.text:
+            result["artist"] = artist_el.text
+
+        album_el = item.find("upnp:album", ns)
+        if album_el is not None and album_el.text:
+            result["album"] = album_el.text
+
+        art_el = item.find("upnp:albumArtURI", ns)
+        if art_el is not None and art_el.text:
+            result["image_url"] = art_el.text
+
+        return result
+
+    # ------------------------------------------------------------------
     # Renderer callbacks (per-instance)
     # ------------------------------------------------------------------
 
@@ -312,6 +366,7 @@ class DLNAReceiverProvider(PluginProvider):
             uri,
         )
         inst.current_stream_url = uri
+        inst.current_metadata = self._parse_didl_metadata(metadata)
 
     async def _on_play(self, inst: RendererInstance) -> None:
         """Handle Play — start streaming to this instance's player."""
@@ -325,7 +380,14 @@ class DLNAReceiverProvider(PluginProvider):
             return
 
         LOGGER.info("Starting playback on player %s", target)
-        media = PlayerMedia(uri=inst.current_stream_url)
+        meta = inst.current_metadata or {}
+        media = PlayerMedia(
+            uri=inst.current_stream_url,
+            title=meta.get("title"),
+            artist=meta.get("artist"),
+            album=meta.get("album"),
+            image_url=meta.get("image_url"),
+        )
         await self.mass.players.play_media(target, media)
 
     async def _on_pause(self, inst: RendererInstance) -> None:

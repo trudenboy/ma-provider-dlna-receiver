@@ -15,6 +15,7 @@ authors = [
 dependencies = [
     "music_assistant",
     "aiohttp>=3.9.0",
+    "defusedxml>=0.7.0",
 ]
 
 [project.optional-dependencies]
