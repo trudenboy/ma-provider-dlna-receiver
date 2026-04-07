@@ -34,6 +34,18 @@ and more.
                                    └──────────────────────┘
 ```
 
+## Multi-player mode
+
+Set `target_players` to `*` to expose **every MA player** as a separate DLNA
+renderer on your network.  Control points see them individually:
+
+- *Music Assistant — Kitchen*
+- *Music Assistant — Living Room*
+- *Music Assistant — Yandex Station*
+
+Each renderer has a stable UDN (UUID5 derived from player ID) so bookmarks
+in BubbleUPnP / mconnect persist across restarts.
+
 ## Quick start
 
 ### Docker (recommended)
@@ -53,26 +65,41 @@ source .venv/bin/activate
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `friendly_name` | Name visible to DLNA control points | `Music Assistant` |
-| `target_player` | MA player ID to route audio to | *(empty — select at runtime)* |
+| `friendly_name` | Prefix for DLNA renderer names | `Music Assistant` |
+| `target_players` | Comma-separated player IDs, or `*` for all | *(empty — single renderer)* |
 | `bind_ip` | IP for UPnP HTTP server & SSDP | *(auto-detect)* |
-| `http_port` | Port for UPnP HTTP server | `8298` |
+| `http_port` | Base port for UPnP HTTP servers | `8298` |
+
+> In multi-player mode ports auto-increment: 8298, 8299, 8300, …
 
 ## Project structure
 
 ```
 provider/
   __init__.py      — setup(), get_config_entries()
-  provider.py      — DLNAReceiverProvider (PluginProvider)
-  renderer.py      — UPnP MediaRenderer HTTP server + SOAP handlers
+  provider.py      — DLNAReceiverProvider + RendererInstance
+  renderer.py      — UPnP MediaRenderer HTTP server + SOAP + GENA eventing
+  eventing.py      — GENA subscription manager (SUBSCRIBE/NOTIFY)
   ssdp.py          — SSDP advertisement and M-SEARCH responder
   constants.py     — UPnP URNs, config keys, defaults
   manifest.json    — MA provider metadata
+  scpd/            — Full UPnP service description XMLs
+    AVTransport.xml
+    RenderingControl.xml
+    ConnectionManager.xml
 tests/
 scripts/
   setup.sh         — local dev environment setup
   docker-init.sh   — Docker container init script
 ```
+
+## UPnP compliance
+
+- **AVTransport**: SetAVTransportURI, Play, Pause, Stop, Seek, GetTransportInfo, GetPositionInfo, GetMediaInfo
+- **RenderingControl**: GetVolume, SetVolume, GetMute, SetMute
+- **ConnectionManager**: GetProtocolInfo, GetCurrentConnectionIDs, GetCurrentConnectionInfo
+- **GENA Eventing**: SUBSCRIBE/UNSUBSCRIBE/NOTIFY with LastChange events
+- **SSDP**: alive/byebye/M-SEARCH response for all service types
 
 ## Status
 
