@@ -16,17 +16,10 @@ env_name="${1:-.venv}"
 uv venv "$REPO_ROOT/$env_name"
 source "$REPO_ROOT/$env_name/bin/activate"
 
-# Clone fork MA server (player provider)
-if [ ! -d "$REPO_ROOT/ma-server" ]; then
-  git clone --depth=1 -b dev https://github.com/trudenboy/ma-server.git "$REPO_ROOT/ma-server"
-fi
-# Symlink provider into server
-PROVIDER_TARGET="$REPO_ROOT/ma-server/music_assistant/providers/dlna_receiver"
-rm -rf "$PROVIDER_TARGET"
-ln -s "$REPO_ROOT/provider/" "$PROVIDER_TARGET"
-cd "$REPO_ROOT/ma-server"
-uv pip install -e "." -e ".[test]"
-uv pip install -r requirements_all.txt
+# Install upstream MA server + provider in editable mode
+uv pip install \
+  "git+https://github.com/music-assistant/server.git@dev" \
+  -e "$REPO_ROOT/.[test]"
 
 # Set up pre-commit hooks if available
 if command -v pre-commit &>/dev/null; then
