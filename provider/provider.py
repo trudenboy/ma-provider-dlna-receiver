@@ -104,12 +104,27 @@ class DLNAReceiverProvider(PluginProvider):
         # When target_players=* but no players registered yet, retry after delay
         if raw_target == "*" and not player_specs:
             LOGGER.info("target_players=* but no players yet, waiting for registration...")
-            for attempt in range(6):
+            for attempt in range(12):
                 await asyncio.sleep(5)
                 player_specs = self._resolve_player_specs()
                 if player_specs:
                     LOGGER.info("Found %d players on attempt %d", len(player_specs), attempt + 1)
                     break
+
+        # When target_players=*, wait a bit more for late-registering players
+        if raw_target == "*" and player_specs:
+            prev_count = len(player_specs)
+            for _ in range(4):
+                await asyncio.sleep(3)
+                player_specs = self._resolve_player_specs()
+                if len(player_specs) == prev_count:
+                    break
+                LOGGER.info(
+                    "Player count changed %d → %d, waiting for more...",
+                    prev_count,
+                    len(player_specs),
+                )
+                prev_count = len(player_specs)
 
         if not player_specs:
             # Fallback: single renderer with no fixed target
@@ -241,10 +256,29 @@ class DLNAReceiverProvider(PluginProvider):
         return specs
 
     def _get_all_players(self) -> list[tuple[str, str]]:
-        """Get all MA players as (player_id, display_name) pairs."""
+        """Get all MA players as (player_id, display_name) pairs.
+
+        Includes unavailable players (they may come online later).
+        Filters out protocol players and our own DLNA Receiver renderers.
+        """
         try:
-            players = self.mass.players.all_players(return_unavailable=False)
-            return [(p.player_id, p.display_name or p.name or p.player_id) for p in players]
+            players = self.mass.players.all_players(
+                return_unavailable=True,
+                return_protocol_players=False,
+            )
+            own_player_ids = {inst.player_id for inst in self._instances.values()}
+            result = []
+            for p in players:
+                # Skip our own renderer players (avoid recursion)
+                if p.player_id in own_player_ids:
+                    continue
+                if p.player_id.startswith("up") and any(
+                    p.player_id.endswith(inst.renderer.udn.replace("uuid:", "").replace("-", ""))
+                    for inst in self._instances.values()
+                ):
+                    continue
+                result.append((p.player_id, p.display_name or p.name or p.player_id))
+            return result
         except Exception:
             LOGGER.warning("Could not enumerate MA players", exc_info=True)
             return []
