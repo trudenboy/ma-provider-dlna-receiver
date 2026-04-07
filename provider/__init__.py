@@ -7,13 +7,21 @@ and cast audio streams to any MA player.
 
 Architecture
 ~~~~~~~~~~~~
-1. SSDP advertisement  — announces a virtual MediaRenderer on the LAN
+1. SSDP advertisement  — announces virtual MediaRenderers on the LAN
 2. UPnP HTTP server     — serves device/service XML descriptions and
                           accepts SOAP control actions (AVTransport,
                           RenderingControl, ConnectionManager)
 3. PluginSource bridge  — received audio URL is fed into the MA streaming
                           pipeline as a PluginSource, routed to the
-                          configured target player
+                          corresponding target player
+
+Multi-player mode
+~~~~~~~~~~~~~~~~~
+When ``target_players`` contains multiple comma-separated player_id values
+(or the special value ``*``), the provider creates one virtual DLNA
+renderer per player, each with a unique UDN and HTTP port.  DLNA control
+points see each renderer as a separate device — e.g.
+"Music Assistant — Kitchen", "Music Assistant — Living Room".
 """
 
 from __future__ import annotations
@@ -27,7 +35,7 @@ from .constants import (
     CONF_BIND_IP,
     CONF_FRIENDLY_NAME,
     CONF_HTTP_PORT,
-    CONF_TARGET_PLAYER,
+    CONF_TARGET_PLAYERS,
     DEFAULT_FRIENDLY_NAME,
     DEFAULT_HTTP_PORT,
 )
@@ -50,18 +58,22 @@ async def get_config_entries(
         ConfigEntry(
             key=CONF_FRIENDLY_NAME,
             type=ConfigEntryType.STRING,
-            label="Friendly name",
-            description="Name shown to DLNA control points on the network.",
+            label="Friendly name prefix",
+            description=(
+                "Prefix for DLNA renderer names shown on the network. "
+                "Player name is appended automatically in multi-player mode."
+            ),
             default_value=DEFAULT_FRIENDLY_NAME,
             required=True,
         ),
         ConfigEntry(
-            key=CONF_TARGET_PLAYER,
+            key=CONF_TARGET_PLAYERS,
             type=ConfigEntryType.STRING,
-            label="Target player",
+            label="Target players",
             description=(
-                "MA player_id to route received audio to. "
-                "Leave empty to select at playback time."
+                "Comma-separated MA player_ids to expose as DLNA renderers. "
+                'Use "*" to auto-create a renderer for every MA player. '
+                "Leave empty for a single renderer without a fixed target."
             ),
             required=False,
         ),
@@ -78,8 +90,11 @@ async def get_config_entries(
         ConfigEntry(
             key=CONF_HTTP_PORT,
             type=ConfigEntryType.INTEGER,
-            label="HTTP port",
-            description="Port for the UPnP description / control HTTP server.",
+            label="HTTP base port",
+            description=(
+                "Base port for UPnP HTTP servers. In multi-player mode, "
+                "each renderer uses an incrementing port (8298, 8299, …)."
+            ),
             default_value=DEFAULT_HTTP_PORT,
             required=True,
         ),

@@ -16,6 +16,7 @@ SSDP_MAX_AGE = 1800  # seconds
 # Config entry keys
 CONF_FRIENDLY_NAME = "friendly_name"
 CONF_TARGET_PLAYER = "target_player"
+CONF_TARGET_PLAYERS = "target_players"
 CONF_BIND_IP = "bind_ip"
 CONF_HTTP_PORT = "http_port"
 
@@ -45,3 +46,6 @@ TRANSPORT_STATE_PLAYING = "PLAYING"
 TRANSPORT_STATE_PAUSED = "PAUSED_PLAYBACK"
 TRANSPORT_STATE_TRANSITIONING = "TRANSITIONING"
 TRANSPORT_STATE_NO_MEDIA = "NO_MEDIA_PRESENT"
+
+# UUID namespace for deterministic UDN generation
+UDN_NAMESPACE = "ma-dlna-receiver"
