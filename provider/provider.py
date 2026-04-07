@@ -90,9 +90,9 @@ class DLNAReceiverProvider(PluginProvider):
         self._metadata_task: asyncio.Task | None = None
 
     @property
-    def supported_features(self) -> tuple[ProviderFeature, ...]:
+    def supported_features(self) -> set[ProviderFeature]:
         """Return supported features."""
-        return (ProviderFeature.AUDIO_SOURCE,)
+        return {ProviderFeature.AUDIO_SOURCE}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -104,7 +104,9 @@ class DLNAReceiverProvider(PluginProvider):
             self.config.get_value(CONF_FRIENDLY_NAME) or DEFAULT_FRIENDLY_NAME,
         )
         self._bind_ip = str(self.config.get_value(CONF_BIND_IP) or "") or self._detect_ip()
-        self._base_port = int(self.config.get_value(CONF_HTTP_PORT) or DEFAULT_HTTP_PORT)
+        self._base_port = int(
+            self.config.get_value(CONF_HTTP_PORT) or DEFAULT_HTTP_PORT  # type: ignore[arg-type]
+        )
 
         raw_target = str(self.config.get_value(CONF_TARGET_PLAYERS) or "").strip()
 
