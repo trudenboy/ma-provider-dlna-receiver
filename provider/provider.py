@@ -25,9 +25,8 @@ from music_assistant_models.config_entries import ConfigValueType  # noqa: F401
 from music_assistant_models.enums import MediaType, ProviderFeature
 from music_assistant_models.streamdetails import StreamMetadata
 
-from music_assistant.models import PluginProvider
 from music_assistant.models.player import PlayerMedia
-from music_assistant.models.plugin import PluginSource
+from music_assistant.models.plugin import PluginProvider, PluginSource
 
 from .constants import (
     CONF_BIND_IP,
@@ -87,7 +86,7 @@ class DLNAReceiverProvider(PluginProvider):
         self._active_player_id: str | None = None
         self._play_start_time: float | None = None
         self._elapsed_offset: int = 0
-        self._metadata_task: asyncio.Task | None = None
+        self._metadata_task: asyncio.Task[None] | None = None
 
     @property
     def supported_features(self) -> set[ProviderFeature]:
@@ -631,7 +630,7 @@ class DLNAReceiverProvider(PluginProvider):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.connect(("8.8.8.8", 80))
-            ip = sock.getsockname()[0]
+            ip: str = sock.getsockname()[0]
             sock.close()
             return ip
         except Exception:
