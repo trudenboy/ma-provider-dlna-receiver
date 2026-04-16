@@ -82,7 +82,21 @@ ignore = [
   "S307",
   "B007",
   "ANN204",
+  "D100",
+  "D107",
+  "PLC0415",
+  "PLW2901",
+  "PT011",
+  "SIM105",
+  "SIM108",
+  "TC002",
+  "ISC001",
+  "PLW0108",
+  "RUF059",
 ]
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["D103"]
 
 [lint.pydocstyle]
 convention = "pep257"
