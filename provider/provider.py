@@ -111,7 +111,14 @@ class DLNAReceiverProvider(PluginProvider):
         self._friendly_prefix = str(
             self.config.get_value(CONF_FRIENDLY_NAME) or DEFAULT_FRIENDLY_NAME,
         )
-        self._bind_ip = str(self.config.get_value(CONF_BIND_IP) or "") or self._detect_ip()
+        configured_ip = str(self.config.get_value(CONF_BIND_IP) or "")
+        if configured_ip:
+            self._bind_ip = configured_ip
+        else:
+            # UDP connect() can briefly block on odd network stacks; keep the
+            # event loop responsive by running the probe in the default executor.
+            loop = asyncio.get_running_loop()
+            self._bind_ip = await loop.run_in_executor(None, self._detect_ip)
         self._base_port = int(
             self.config.get_value(CONF_HTTP_PORT) or DEFAULT_HTTP_PORT  # type: ignore[arg-type]
         )
