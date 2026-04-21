@@ -275,14 +275,22 @@ class UPnPRenderer:
         LOGGER.debug("AVTransport action: %s", action_name)
 
         if action_name == "SetAVTransportURI":
-            uri = self._extract_xml_value(body, "CurrentURI")
+            uri = self._extract_xml_value(body, "CurrentURI") or ""
             metadata = self._extract_xml_value(body, "CurrentURIMetaData")
             LOGGER.debug("SetAVTransportURI raw metadata (first 500): %s", (metadata or "")[:500])
-            self.current_uri = uri or ""
+            # Validate before mutating state: if the callback rejects the URI
+            # (raises ValueError), keep the prior transport state intact and
+            # surface a SOAP fault so the control point knows it was refused,
+            # instead of returning 200 OK and silently ignoring the request.
+            if self.on_set_av_transport_uri:
+                try:
+                    await self.on_set_av_transport_uri(uri, metadata)
+                except ValueError as exc:
+                    LOGGER.info("SetAVTransportURI rejected: %s", exc)
+                    return self._soap_error(716, "Illegal URI")
+            self.current_uri = uri
             self.current_uri_metadata = metadata or ""
             self.transport_state = TRANSPORT_STATE_STOPPED
-            if self.on_set_av_transport_uri:
-                await self.on_set_av_transport_uri(self.current_uri, metadata)
             await self._notify_av_transport_change()
             return self._soap_response(action_name, UPNP_SERVICE_AV_TRANSPORT)
 

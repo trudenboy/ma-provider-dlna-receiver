@@ -435,7 +435,7 @@ class DLNAReceiverProvider(PluginProvider):
         # Bound untrusted input before parsing (normal DIDL is well under this).
         if len(metadata) > _MAX_DIDL_CHARS:
             LOGGER.info(
-                "DIDL metadata truncated from %d to %d bytes",
+                "DIDL metadata truncated from %d to %d chars",
                 len(metadata),
                 _MAX_DIDL_CHARS,
             )
@@ -497,7 +497,13 @@ class DLNAReceiverProvider(PluginProvider):
         uri: str,
         metadata: str | None,
     ) -> None:
-        """Handle SetAVTransportURI for a specific renderer instance."""
+        """Handle SetAVTransportURI for a specific renderer instance.
+
+        Raises:
+            ValueError: if the URI is not a safe http(s) stream URL. The
+                renderer turns this into SOAP fault 716 so the control
+                point sees the rejection instead of a silent 200 OK.
+        """
         safe_url = _validate_stream_url(uri)
         if safe_url is None:
             LOGGER.warning(
@@ -505,7 +511,7 @@ class DLNAReceiverProvider(PluginProvider):
                 inst.player_name or "(default)",
                 _redact_url(uri),
             )
-            return
+            raise ValueError("unsupported URI scheme or missing host")
         LOGGER.info(
             "Received transport URI for '%s': %s",
             inst.player_name or "(default)",

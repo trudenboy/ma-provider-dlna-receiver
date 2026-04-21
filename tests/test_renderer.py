@@ -236,6 +236,37 @@ async def test_invalid_action(client: TestClient) -> None:
     assert "Invalid Action" in text
 
 
+async def test_set_av_transport_uri_rejected(
+    client: TestClient,
+    renderer: UPnPRenderer,
+) -> None:
+    """A callback that raises ValueError causes a 716 SOAP fault and no state change.
+
+    Previously the renderer eagerly wrote ``current_uri`` and returned 200 OK
+    before invoking the callback, so a silent SSRF-guard rejection in the
+    provider left control points thinking the URI was accepted.
+    """
+    renderer.current_uri = "http://prior.example/stream.flac"
+
+    async def _reject(_uri: str, _metadata: str | None) -> None:
+        raise ValueError("unsupported URI scheme or missing host")
+
+    renderer.on_set_av_transport_uri = _reject
+
+    resp = await client.post(
+        "/AVTransport/control",
+        headers={
+            "SOAPACTION": '"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"',
+        },
+        data="<CurrentURI>file:///etc/passwd</CurrentURI>",
+    )
+    assert resp.status == 500
+    text = await resp.text()
+    assert "<errorCode>716</errorCode>" in text
+    # State was NOT mutated by the rejected request.
+    assert renderer.current_uri == "http://prior.example/stream.flac"
+
+
 async def test_set_mute(client: TestClient, renderer: UPnPRenderer) -> None:
     """SetMute updates renderer state and GetMute reflects the change."""
     resp = await client.post(
