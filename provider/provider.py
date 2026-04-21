@@ -20,7 +20,6 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from html import unescape
 from typing import TYPE_CHECKING
-from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
 from music_assistant_models.config_entries import ConfigValueType  # noqa: F401
@@ -42,6 +41,8 @@ from .constants import (
 )
 from .renderer import UPnPRenderer
 from .ssdp import SSDPAdvertiser
+from .urls import redact_url as _redact_url
+from .urls import validate_stream_url as _validate_stream_url
 
 if TYPE_CHECKING:
     from music_assistant_models.config_entries import ProviderConfig
@@ -51,40 +52,9 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-# External DLNA control points send arbitrary URIs; only HTTP(S) are safe to proxy.
-_ALLOWED_STREAM_SCHEMES = frozenset({"http", "https"})
 # DIDL-Lite metadata is normally < 4 KiB; bound input (measured in characters)
 # to guard CPU/memory on parse.
 _MAX_DIDL_CHARS = 64 * 1024
-
-
-def _validate_stream_url(uri: str) -> str | None:
-    """Return the URI if it is a safe http(s) stream URL, else None."""
-    if not uri:
-        return None
-    try:
-        parts = urlsplit(uri)
-    except ValueError:
-        return None
-    if parts.scheme.lower() not in _ALLOWED_STREAM_SCHEMES:
-        return None
-    if not parts.hostname:
-        return None
-    return uri
-
-
-def _redact_url(uri: str) -> str:
-    """Return a log-safe copy of a URL with userinfo replaced by ``***``."""
-    try:
-        parts = urlsplit(uri)
-    except ValueError:
-        return "<invalid-url>"
-    if not parts.username and not parts.password:
-        return uri
-    netloc = parts.hostname or ""
-    if parts.port:
-        netloc = f"{netloc}:{parts.port}"
-    return urlunsplit((parts.scheme, f"***@{netloc}", parts.path, parts.query, parts.fragment))
 
 
 @dataclass

@@ -70,6 +70,24 @@ def test_renew_unknown_raises(manager: EventingManager) -> None:
         manager.renew("uuid:nonexistent")
 
 
+def test_renew_expired_raises_and_removes(manager: EventingManager) -> None:
+    """renew() on an expired SID raises KeyError AND evicts the stale entry.
+
+    Per UPnP spec, renewing an expired subscription must fail with 412
+    Precondition Failed — the renderer surfaces the KeyError as 412, and
+    the manager must not keep the dead subscription around.
+    """
+    sid, _ = manager.subscribe("<http://host:8080/cb>", "Second-100")
+    # Force expiry by backdating the subscription's creation timestamp.
+    manager._subscriptions[sid].created_at -= 1000
+    assert manager._subscriptions[sid].is_expired
+
+    with pytest.raises(KeyError):
+        manager.renew(sid, "Second-1800")
+
+    assert sid not in manager._subscriptions
+
+
 def test_parse_callback_header() -> None:
     """_parse_callback_header splits angle-bracketed URLs into a list."""
     urls = EventingManager._parse_callback_header(
