@@ -46,9 +46,14 @@ class EventingManager:
     def __init__(self) -> None:
         self._subscriptions: dict[str, Subscription] = {}
         self._cleanup_task: asyncio.Task[None] | None = None
+        self._pending_tasks: set[asyncio.Task[None]] = set()
+        self._session: aiohttp.ClientSession | None = None
 
     async def start(self) -> None:
         """Start the periodic subscription cleanup task."""
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5),
+        )
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def stop(self) -> None:
@@ -60,6 +65,14 @@ class EventingManager:
             except asyncio.CancelledError:
                 pass
             self._cleanup_task = None
+        if self._pending_tasks:
+            for task in list(self._pending_tasks):
+                task.cancel()
+            await asyncio.gather(*self._pending_tasks, return_exceptions=True)
+            self._pending_tasks.clear()
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
         self._subscriptions.clear()
 
     def subscribe(
@@ -116,6 +129,10 @@ class EventingManager:
         sub = self._subscriptions.get(sid)
         if sub is None:
             raise KeyError(f"Unknown SID: {sid}")
+        if sub.is_expired:
+            # Per UPnP spec, renew of an expired SID is a 412 Precondition Failed
+            self._subscriptions.pop(sid, None)
+            raise KeyError(f"Expired SID: {sid}")
 
         timeout = self._parse_timeout(timeout_header)
         sub.timeout = timeout
@@ -147,7 +164,11 @@ class EventingManager:
             if sub.is_expired:
                 expired_sids.append(sid)
                 continue
-            asyncio.create_task(self._send_notify(sub, xml_body))
+            task: asyncio.Task[None] = asyncio.create_task(
+                self._send_notify(sub, xml_body),
+            )
+            self._pending_tasks.add(task)
+            task.add_done_callback(self._pending_tasks.discard)
 
         for sid in expired_sids:
             self._subscriptions.pop(sid, None)
@@ -166,6 +187,11 @@ class EventingManager:
 
     async def _send_notify(self, sub: Subscription, xml_body: str) -> None:
         """Send a GENA NOTIFY to a single subscriber."""
+        session = self._session
+        if session is None or session.closed:
+            LOGGER.debug("NOTIFY skipped — session not started")
+            return
+
         headers = {
             "Content-Type": 'text/xml; charset="utf-8"',
             "NT": "upnp:event",
@@ -177,16 +203,12 @@ class EventingManager:
 
         for url in sub.callback_urls:
             try:
-                async with (
-                    aiohttp.ClientSession() as session,
-                    session.request(
-                        "NOTIFY",
-                        url,
-                        headers=headers,
-                        data=xml_body,
-                        timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp,
-                ):
+                async with session.request(
+                    "NOTIFY",
+                    url,
+                    headers=headers,
+                    data=xml_body,
+                ) as resp:
                     if resp.status >= 300:
                         LOGGER.warning(
                             "NOTIFY to %s returned %s",

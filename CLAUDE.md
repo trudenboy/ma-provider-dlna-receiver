@@ -10,6 +10,7 @@ External apps send audio via standard DLNA protocol; MA routes it to any player.
 - **provider.py** — `DLNAReceiverProvider(PluginProvider)` with `AUDIO_SOURCE` feature
 - **renderer.py** — `UPnPRenderer` aiohttp server handling SOAP actions
 - **ssdp.py** — `SSDPAdvertiser` for multicast SSDP alive/byebye/search
+- **eventing.py** — `EventingManager` per-service GENA SUBSCRIBE/NOTIFY
 - **constants.py** — UPnP URNs, config keys, MIME types
 
 ## Key flows
@@ -42,9 +43,13 @@ Uses `ma-provider-tools` wrapper workflows (ruff + mypy via trudenboy/ma-server 
 ## Important notes
 
 - `network_mode: host` required in Docker for SSDP multicast
-- UPnP eventing (SUBSCRIBE/NOTIFY) is NOT yet implemented — some control points
-  may show stale transport state
+- UPnP eventing (SUBSCRIBE/NOTIFY) is implemented in `eventing.py` via one
+  `EventingManager` per UPnP service; NOTIFY dispatch runs as tracked
+  background tasks and shares a single `aiohttp.ClientSession`
 - The SCPD XMLs are minimal stubs; full state variable tables would improve
   compatibility with strict control points
+- Incoming DLNA URIs are validated (`http`/`https` only); the audio proxy in
+  `get_audio_stream` has per-chunk read and connect timeouts and logs a
+  redacted URL to avoid leaking userinfo credentials
 - `async-upnp-client` is in MA deps but we don't use it directly — we implement
   the *server* side, not the client side

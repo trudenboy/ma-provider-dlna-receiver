@@ -20,7 +20,9 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from html import unescape
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit, urlunsplit
 
+import aiohttp
 from music_assistant_models.config_entries import ConfigValueType  # noqa: F401
 from music_assistant_models.enums import MediaType, ProviderFeature
 from music_assistant_models.streamdetails import StreamMetadata
@@ -48,6 +50,40 @@ if TYPE_CHECKING:
     from music_assistant.mass import MusicAssistant
 
 LOGGER = logging.getLogger(__name__)
+
+# External DLNA control points send arbitrary URIs; only HTTP(S) are safe to proxy.
+_ALLOWED_STREAM_SCHEMES = frozenset({"http", "https"})
+# DIDL-Lite metadata is normally < 4 KiB; bound input to guard CPU/memory on parse.
+_MAX_DIDL_BYTES = 64 * 1024
+
+
+def _validate_stream_url(uri: str) -> str | None:
+    """Return the URI if it is a safe http(s) stream URL, else None."""
+    if not uri:
+        return None
+    try:
+        parts = urlsplit(uri)
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in _ALLOWED_STREAM_SCHEMES:
+        return None
+    if not parts.hostname:
+        return None
+    return uri
+
+
+def _redact_url(uri: str) -> str:
+    """Return a log-safe copy of a URL with userinfo replaced by ``***``."""
+    try:
+        parts = urlsplit(uri)
+    except ValueError:
+        return "<invalid-url>"
+    if not parts.username and not parts.password:
+        return uri
+    netloc = parts.hostname or ""
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, f"***@{netloc}", parts.path, parts.query, parts.fragment))
 
 
 @dataclass
@@ -87,6 +123,7 @@ class DLNAReceiverProvider(PluginProvider):
         self._play_start_time: float | None = None
         self._elapsed_offset: int = 0
         self._metadata_task: asyncio.Task[None] | None = None
+        self._discovery_task: asyncio.Task[None] | None = None
 
     @property
     def supported_features(self) -> set[ProviderFeature]:
@@ -108,44 +145,9 @@ class DLNAReceiverProvider(PluginProvider):
         )
 
         raw_target = str(self.config.get_value(CONF_TARGET_PLAYERS) or "").strip()
-
         player_specs = self._resolve_player_specs()
 
-        # When target_players=* but no players registered yet, retry after delay
-        if raw_target == "*" and not player_specs:
-            LOGGER.info("target_players=* but no players yet, waiting for registration...")
-            for attempt in range(12):
-                await asyncio.sleep(5)
-                player_specs = self._resolve_player_specs()
-                if player_specs:
-                    LOGGER.info("Found %d players on attempt %d", len(player_specs), attempt + 1)
-                    break
-
-        # When target_players=*, wait a bit more for late-registering players
-        if raw_target == "*" and player_specs:
-            prev_count = len(player_specs)
-            for _ in range(4):
-                await asyncio.sleep(3)
-                player_specs = self._resolve_player_specs()
-                if len(player_specs) == prev_count:
-                    break
-                LOGGER.info(
-                    "Player count changed %d → %d, waiting for more...",
-                    prev_count,
-                    len(player_specs),
-                )
-                prev_count = len(player_specs)
-
-        if not player_specs:
-            # Fallback: single renderer with no fixed target
-            await self._create_instance(
-                player_id="",
-                player_name="",
-                friendly_prefix=self._friendly_prefix,
-                bind_ip=self._bind_ip,
-                http_port=self._base_port,
-            )
-        else:
+        if player_specs:
             for idx, (pid, pname) in enumerate(player_specs):
                 await self._create_instance(
                     player_id=pid,
@@ -154,19 +156,61 @@ class DLNAReceiverProvider(PluginProvider):
                     bind_ip=self._bind_ip,
                     http_port=self._base_port + idx,
                 )
+        else:
+            # Fallback: single unbound renderer so DLNA discovery works immediately.
+            await self._create_instance(
+                player_id="",
+                player_name="",
+                friendly_prefix=self._friendly_prefix,
+                bind_ip=self._bind_ip,
+                http_port=self._base_port,
+            )
 
-        count = len(self._instances)
+        # For target_players=*, keep looking for late-registering players in the
+        # background instead of blocking startup for up to 72 seconds.
+        if raw_target == "*":
+            self._discovery_task = asyncio.create_task(self._adopt_late_players())
+
         LOGGER.info(
             "DLNA Receiver started: %d renderer(s) on %s (base port %s)",
-            count,
+            len(self._instances),
             self._bind_ip,
             self._base_port,
         )
+
+    async def _adopt_late_players(self) -> None:
+        """Poll for newly-registered MA players and spin up renderers for them.
+
+        Runs only when ``target_players=*``. Caps the total wait at ~5 minutes
+        so stale provider instances don't poll forever.
+        """
+        known_ids = {inst.player_id for inst in self._instances.values() if inst.player_id}
+        try:
+            for _ in range(60):  # ~5 minutes at 5s intervals
+                await asyncio.sleep(5)
+                specs = self._resolve_player_specs()
+                new = [(pid, name) for pid, name in specs if pid and pid not in known_ids]
+                for pid, name in new:
+                    port = self._base_port + len(self._instances)
+                    await self._create_instance(
+                        player_id=pid,
+                        player_name=name,
+                        friendly_prefix=self._friendly_prefix,
+                        bind_ip=self._bind_ip,
+                        http_port=port,
+                    )
+                    known_ids.add(pid)
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            LOGGER.debug("Late-player discovery loop error", exc_info=True)
 
     async def unload(self, is_removed: bool = False) -> None:
         """Unload the provider — stop all renderer instances."""
         if self._metadata_task and not self._metadata_task.done():
             self._metadata_task.cancel()
+        if self._discovery_task and not self._discovery_task.done():
+            self._discovery_task.cancel()
         for inst in self._instances.values():
             await inst.ssdp.stop()
             await inst.renderer.stop()
@@ -348,8 +392,6 @@ class DLNAReceiverProvider(PluginProvider):
         MA calls this when the plugin source is activated on a player.
         We proxy the external URL through aiohttp and yield raw bytes.
         """
-        import aiohttp
-
         inst = self._instances.get(player_id) or self._instances.get("__default__")
         stream_url = inst.current_stream_url if inst else None
 
@@ -360,10 +402,30 @@ class DLNAReceiverProvider(PluginProvider):
             )
             return
 
-        LOGGER.debug("Proxying DLNA stream for %s: %s", player_id, stream_url)
-        async with aiohttp.ClientSession() as session, session.get(stream_url) as resp:
-            async for chunk in resp.content.iter_any():
-                yield chunk
+        LOGGER.debug("Proxying DLNA stream for %s: %s", player_id, _redact_url(stream_url))
+        # total=None: streams may be long-running; bound connect + per-chunk read only.
+        timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=30)
+        try:
+            async with (
+                aiohttp.ClientSession(timeout=timeout) as session,
+                session.get(stream_url) as resp,
+            ):
+                if resp.status != 200:
+                    LOGGER.warning(
+                        "Upstream DLNA source returned HTTP %s for %s",
+                        resp.status,
+                        _redact_url(stream_url),
+                    )
+                    return
+                async for chunk in resp.content.iter_any():
+                    yield chunk
+        except (aiohttp.ClientError, TimeoutError):
+            LOGGER.warning(
+                "Error proxying DLNA stream %s",
+                _redact_url(stream_url),
+                exc_info=True,
+            )
+            return
         LOGGER.debug("DLNA stream ended for %s", player_id)
 
     # ------------------------------------------------------------------
@@ -382,6 +444,15 @@ class DLNAReceiverProvider(PluginProvider):
         }
         if not metadata:
             return result
+
+        # Bound untrusted input before parsing (normal DIDL is well under this).
+        if len(metadata) > _MAX_DIDL_BYTES:
+            LOGGER.info(
+                "DIDL metadata truncated from %d to %d bytes",
+                len(metadata),
+                _MAX_DIDL_BYTES,
+            )
+            metadata = metadata[:_MAX_DIDL_BYTES]
 
         # SOAP bodies may contain XML-escaped DIDL-Lite content
         metadata = unescape(metadata)
@@ -440,12 +511,20 @@ class DLNAReceiverProvider(PluginProvider):
         metadata: str | None,
     ) -> None:
         """Handle SetAVTransportURI for a specific renderer instance."""
+        safe_url = _validate_stream_url(uri)
+        if safe_url is None:
+            LOGGER.warning(
+                "Rejecting transport URI for '%s' (unsupported scheme/host): %s",
+                inst.player_name or "(default)",
+                _redact_url(uri),
+            )
+            return
         LOGGER.info(
             "Received transport URI for '%s': %s",
             inst.player_name or "(default)",
-            uri,
+            _redact_url(safe_url),
         )
-        inst.current_stream_url = uri
+        inst.current_stream_url = safe_url
         inst.current_metadata = self._parse_didl_metadata(metadata)
 
     async def _on_play(self, inst: RendererInstance) -> None:

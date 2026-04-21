@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
-from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.etree.ElementTree import Element, ParseError, SubElement, fromstring, tostring
+from xml.sax.saxutils import escape
 
 from aiohttp import web
 
@@ -32,6 +33,11 @@ from .eventing import EventingManager
 LOGGER = logging.getLogger(__name__)
 
 SCPD_DIR = Path(__file__).parent / "scpd"
+
+SoapCallback = Callable[..., Awaitable[None]]
+
+# Extra entity mapping for XML attribute values (default escape() handles only &, <, >).
+_ATTR_ENTITIES = {'"': "&quot;"}
 
 
 class UPnPRenderer:
@@ -67,13 +73,13 @@ class UPnPRenderer:
         self._evt_connection_manager = EventingManager()
 
         # Callbacks (set by provider)
-        self.on_set_av_transport_uri: Any = None
-        self.on_play: Any = None
-        self.on_pause: Any = None
-        self.on_stop: Any = None
-        self.on_seek: Any = None
-        self.on_set_volume: Any = None
-        self.on_set_mute: Any = None
+        self.on_set_av_transport_uri: SoapCallback | None = None
+        self.on_play: SoapCallback | None = None
+        self.on_pause: SoapCallback | None = None
+        self.on_stop: SoapCallback | None = None
+        self.on_seek: SoapCallback | None = None
+        self.on_set_volume: SoapCallback | None = None
+        self.on_set_mute: SoapCallback | None = None
 
     def _setup_routes(self) -> None:
         """Register HTTP routes for UPnP description, control, and eventing."""
@@ -364,7 +370,12 @@ class UPnPRenderer:
         if action_name == "SetVolume":
             vol_str = self._extract_xml_value(body, "DesiredVolume")
             if vol_str is not None:
-                self.volume = max(0, min(100, int(vol_str)))
+                try:
+                    vol = int(vol_str.strip())
+                except (ValueError, TypeError):
+                    LOGGER.warning("Invalid DesiredVolume value: %r", vol_str)
+                    return self._soap_error(402, "Invalid Args")
+                self.volume = max(0, min(100, vol))
                 if self.on_set_volume:
                     await self.on_set_volume(self.volume)
                 await self._notify_rendering_control_change()
@@ -383,7 +394,7 @@ class UPnPRenderer:
         if action_name == "SetMute":
             mute_str = self._extract_xml_value(body, "DesiredMute")
             if mute_str is not None:
-                self.mute = mute_str in ("1", "true", "True")
+                self.mute = mute_str.strip().lower() in {"1", "true", "yes"}
                 if self.on_set_mute:
                     await self.on_set_mute(self.mute)
                 await self._notify_rendering_control_change()
@@ -441,12 +452,20 @@ class UPnPRenderer:
 
     @staticmethod
     def _extract_xml_value(xml_str: str, tag: str) -> str | None:
-        """Extract a value from a SOAP XML body by tag name (naive parser)."""
-        import re
+        """Extract a value from a SOAP XML body by tag name.
 
-        pattern = rf"<[^>]*{tag}[^>]*>(.*?)</[^>]*{tag}>"
-        match = re.search(pattern, xml_str, re.DOTALL)
-        return match.group(1) if match else None
+        Accepts fragments (tests) or full envelopes: wraps input in a
+        synthetic root so ElementTree can always parse it, and searches
+        namespace-agnostically via the ``{*}tag`` wildcard.
+        """
+        try:
+            root = fromstring(f"<r>{xml_str}</r>")  # noqa: S314
+        except ParseError:
+            return None
+        elem = root.find(f".//{{*}}{tag}")
+        if elem is None:
+            return None
+        return elem.text or ""
 
     @staticmethod
     def _soap_response(
@@ -459,12 +478,12 @@ class UPnPRenderer:
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
             s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
   <s:Body>
-    <u:{action_name}Response xmlns:u="{service_type}">"""
+    <u:{escape(action_name)}Response xmlns:u="{escape(service_type, _ATTR_ENTITIES)}">"""
         if values:
             for key, val in values.items():
-                body += f"\n      <{key}>{val}</{key}>"
+                body += f"\n      <{key}>{escape(val)}</{key}>"
         body += f"""
-    </u:{action_name}Response>
+    </u:{escape(action_name)}Response>
   </s:Body>
 </s:Envelope>"""
         return web.Response(body=body, content_type="text/xml", charset="utf-8")
@@ -482,7 +501,7 @@ class UPnPRenderer:
       <detail>
         <UPnPError xmlns="urn:schemas-upnp-org:control-1-0">
           <errorCode>{code}</errorCode>
-          <errorDescription>{description}</errorDescription>
+          <errorDescription>{escape(description)}</errorDescription>
         </UPnPError>
       </detail>
     </s:Fault>
@@ -675,11 +694,9 @@ class UPnPRenderer:
         The LastChange event wraps state variable changes in an
         <Event><InstanceID> structure as required by UPnP spec.
         """
-        from xml.sax.saxutils import escape
-
         parts: list[str] = []
         for name, value in variables.items():
-            attrs = f'val="{escape(value)}"'
+            attrs = f'val="{escape(value, _ATTR_ENTITIES)}"'
             if channel:
                 attrs += f' channel="{channel}"'
             parts.append(f"<{name} {attrs}/>")
