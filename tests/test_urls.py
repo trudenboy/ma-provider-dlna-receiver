@@ -66,7 +66,7 @@ def test_redact_url_masks_user_only() -> None:
 
 
 def test_redact_url_invalid_returns_placeholder() -> None:
-    """A completely unparseable URL yields the sentinel placeholder."""
+    """A completely unparsable URL yields the sentinel placeholder."""
     # urlsplit is quite permissive; use a string that provokes ValueError.
     redacted = redact_url("http://[invalid-ipv6")
     assert redacted == "<invalid-url>"
