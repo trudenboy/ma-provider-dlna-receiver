@@ -11,6 +11,7 @@ each with a unique UDN, HTTP port, and SSDP advertisement.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import socket
 import time
@@ -96,6 +97,8 @@ class DLNAReceiverProvider(PluginProvider):
         self._elapsed_offset: int = 0
         self._metadata_task: asyncio.Task[None] | None = None
         self._discovery_task: asyncio.Task[None] | None = None
+        # Monotonically bumped per renderer; assigned lazily in loaded_in_mass.
+        self._next_port: int = 0
 
     @property
     def supported_features(self) -> set[ProviderFeature]:
@@ -122,28 +125,34 @@ class DLNAReceiverProvider(PluginProvider):
         self._base_port = int(
             self.config.get_value(CONF_HTTP_PORT) or DEFAULT_HTTP_PORT  # type: ignore[arg-type]
         )
+        self._next_port = self._base_port
 
         raw_target = str(self.config.get_value(CONF_TARGET_PLAYERS) or "").strip()
         player_specs = self._resolve_player_specs()
 
         if player_specs:
-            for idx, (pid, pname) in enumerate(player_specs):
+            for pid, pname in player_specs:
                 await self._create_instance(
                     player_id=pid,
                     player_name=pname,
                     friendly_prefix=self._friendly_prefix,
                     bind_ip=self._bind_ip,
-                    http_port=self._base_port + idx,
+                    http_port=self._next_port,
                 )
+                self._next_port += 1
         else:
-            # Fallback: single unbound renderer so DLNA discovery works immediately.
+            # Fallback: single unbound renderer so DLNA discovery works
+            # immediately. In target_players=* mode this is retired as soon
+            # as the first real player renderer registers, so we don't keep
+            # advertising an unroutable renderer once real ones exist.
             await self._create_instance(
                 player_id="",
                 player_name="",
                 friendly_prefix=self._friendly_prefix,
                 bind_ip=self._bind_ip,
-                http_port=self._base_port,
+                http_port=self._next_port,
             )
+            self._next_port += 1
 
         # For target_players=*, keep looking for late-registering players in the
         # background instead of blocking startup for up to 72 seconds.
@@ -161,36 +170,68 @@ class DLNAReceiverProvider(PluginProvider):
         """Poll for newly-registered MA players and spin up renderers for them.
 
         Runs only when ``target_players=*``. Caps the total wait at ~5 minutes
-        so stale provider instances don't poll forever.
+        so stale provider instances don't poll forever. The first time a real
+        player renderer is created we retire the unbound ``__default__``
+        fallback so we aren't advertising a renderer that can't route audio.
         """
         known_ids = {inst.player_id for inst in self._instances.values() if inst.player_id}
+        default_retired = False
         try:
             for _ in range(60):  # ~5 minutes at 5s intervals
                 await asyncio.sleep(5)
                 specs = self._resolve_player_specs()
                 new = [(pid, name) for pid, name in specs if pid and pid not in known_ids]
                 for pid, name in new:
-                    port = self._base_port + len(self._instances)
                     await self._create_instance(
                         player_id=pid,
                         player_name=name,
                         friendly_prefix=self._friendly_prefix,
                         bind_ip=self._bind_ip,
-                        http_port=port,
+                        http_port=self._next_port,
                     )
+                    self._next_port += 1
                     known_ids.add(pid)
+                    if not default_retired:
+                        await self._retire_default_instance()
+                        default_retired = True
         except asyncio.CancelledError:
             pass
         except Exception:
             LOGGER.debug("Late-player discovery loop error", exc_info=True)
 
+    async def _retire_default_instance(self) -> None:
+        """Stop and drop the unbound ``__default__`` renderer, if any.
+
+        Called once from ``_adopt_late_players`` after the first real player
+        renderer is created so control points no longer see a fallback
+        renderer that would silently swallow Play commands.
+        """
+        default = self._instances.pop("__default__", None)
+        if default is None:
+            return
+        await default.ssdp.stop()
+        await default.renderer.stop()
+        LOGGER.info("Retired unbound fallback renderer — real players registered")
+
     async def unload(self, is_removed: bool = False) -> None:
-        """Unload the provider — stop all renderer instances."""
-        if self._metadata_task and not self._metadata_task.done():
-            self._metadata_task.cancel()
-        if self._discovery_task and not self._discovery_task.done():
-            self._discovery_task.cancel()
-        for inst in self._instances.values():
+        """Unload the provider — stop all renderer instances.
+
+        Cancels and *awaits* background tasks before touching ``_instances``:
+        otherwise ``_adopt_late_players`` could still be mid-``_create_instance``
+        and append a new entry to the dict while we're iterating it, which
+        raises ``RuntimeError`` and leaks sockets.
+        """
+        for task in (self._metadata_task, self._discovery_task):
+            if task is None or task.done():
+                continue
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._metadata_task = None
+        self._discovery_task = None
+        # Snapshot before iterating: no more background mutation possible now,
+        # but cheap defense against future concurrent shutdown paths.
+        for inst in list(self._instances.values()):
             await inst.ssdp.stop()
             await inst.renderer.stop()
         self._instances.clear()
