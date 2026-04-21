@@ -35,7 +35,12 @@ def redact_url(uri: str) -> str:
         return "<invalid-url>"
     if not parts.username and not parts.password:
         return uri
-    netloc = parts.hostname or ""
+    host = parts.hostname or ""
+    # urlsplit strips the enclosing brackets from IPv6 hostnames; restore them
+    # so the reconstructed URL is syntactically valid.
+    if ":" in host:
+        host = f"[{host}]"
+    netloc = host
     if parts.port:
         netloc = f"{netloc}:{parts.port}"
     return urlunsplit((parts.scheme, f"***@{netloc}", parts.path, parts.query, parts.fragment))

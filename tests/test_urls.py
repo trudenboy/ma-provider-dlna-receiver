@@ -70,3 +70,15 @@ def test_redact_url_invalid_returns_placeholder() -> None:
     # urlsplit is quite permissive; use a string that provokes ValueError.
     redacted = redact_url("http://[invalid-ipv6")
     assert redacted == "<invalid-url>"
+
+
+def test_redact_url_preserves_ipv6_brackets() -> None:
+    """IPv6 hosts keep their brackets when userinfo is stripped."""
+    redacted = redact_url("http://user:pass@[::1]:8080/x")
+    assert redacted == "http://***@[::1]:8080/x"
+
+
+def test_redact_url_preserves_ipv6_brackets_no_port() -> None:
+    """IPv6 hosts without a port also keep brackets."""
+    redacted = redact_url("https://alice@[2001:db8::1]/foo")
+    assert redacted == "https://***@[2001:db8::1]/foo"

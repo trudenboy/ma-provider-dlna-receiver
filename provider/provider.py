@@ -319,13 +319,17 @@ class DLNAReceiverProvider(PluginProvider):
         if raw == "*":
             return self._get_all_players()
 
-        # Comma-separated list
+        # Comma-separated list (order-preserving dedupe: repeated ids would
+        # collide on the same instance key and leak sockets on each rebind).
         specs: list[tuple[str, str]] = []
+        seen: set[str] = set()
         for raw_pid in raw.split(","):
             pid = raw_pid.strip()
-            if pid:
-                name = self._get_player_name(pid)
-                specs.append((pid, name))
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            name = self._get_player_name(pid)
+            specs.append((pid, name))
         return specs
 
     def _get_all_players(self) -> list[tuple[str, str]]:
@@ -484,6 +488,14 @@ class DLNAReceiverProvider(PluginProvider):
 
         # SOAP bodies may contain XML-escaped DIDL-Lite content
         metadata = unescape(metadata)
+
+        # Defence-in-depth: reject DOCTYPE/ENTITY declarations before parsing
+        # with the stdlib XML parser (defusedxml is not yet a dependency) to
+        # avoid billion-laughs / external-entity DoS on untrusted LAN input.
+        lowered = metadata.lower()
+        if "<!doctype" in lowered or "<!entity" in lowered:
+            LOGGER.info("DIDL metadata rejected: DOCTYPE/ENTITY declaration present")
+            return result
 
         try:
             root = ET.fromstring(metadata)  # noqa: S314
