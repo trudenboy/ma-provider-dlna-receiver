@@ -8,6 +8,7 @@ control points. Includes GENA eventing for state change notifications.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -38,6 +39,13 @@ SoapCallback = Callable[..., Awaitable[None]]
 
 # Extra entity mapping for XML attribute values (default escape() handles only &, <, >).
 _ATTR_ENTITIES = {'"': "&quot;"}
+
+# Upper bound on SOAP body size we agree to parse (normal UPnP bodies are < 4 KiB).
+_MAX_SOAP_BODY_CHARS = 64 * 1024
+
+# Strip a leading XML declaration so we can safely wrap the remaining body in a
+# synthetic root for ElementTree parsing.
+_XML_DECLARATION_RE = re.compile(r"^\s*<\?xml[^?]*\?>\s*", re.IGNORECASE)
 
 
 class UPnPRenderer:
@@ -455,12 +463,23 @@ class UPnPRenderer:
     def _extract_xml_value(xml_str: str, tag: str) -> str | None:
         """Extract a value from a SOAP XML body by tag name.
 
-        Accepts fragments (tests) or full envelopes: wraps input in a
-        synthetic root so ElementTree can always parse it, and searches
+        Accepts fragments (tests) or full envelopes: strips a leading
+        ``<?xml ... ?>`` declaration, wraps the remainder in a synthetic
+        root so ElementTree can always parse it, and searches
         namespace-agnostically via the ``{*}tag`` wildcard.
+
+        Defence-in-depth: rejects oversized bodies and anything carrying a
+        DOCTYPE/ENTITY declaration, since we parse untrusted LAN input with
+        the stdlib parser (defusedxml is not yet a dependency).
         """
+        if len(xml_str) > _MAX_SOAP_BODY_CHARS:
+            return None
+        lowered = xml_str.lower()
+        if "<!doctype" in lowered or "<!entity" in lowered:
+            return None
+        body = _XML_DECLARATION_RE.sub("", xml_str, count=1)
         try:
-            root = fromstring(f"<r>{xml_str}</r>")  # noqa: S314
+            root = fromstring(f"<r>{body}</r>")  # noqa: S314
         except ParseError:
             return None
         elem = root.find(f".//{{*}}{tag}")

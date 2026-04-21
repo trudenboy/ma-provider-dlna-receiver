@@ -66,9 +66,11 @@ class EventingManager:
                 await self._cleanup_task
             self._cleanup_task = None
         if self._pending_tasks:
-            for task in list(self._pending_tasks):
+            # Snapshot: done-callbacks mutate self._pending_tasks.
+            pending = list(self._pending_tasks)
+            for task in pending:
                 task.cancel()
-            await asyncio.gather(*self._pending_tasks, return_exceptions=True)
+            await asyncio.gather(*pending, return_exceptions=True)
             self._pending_tasks.clear()
         if self._session is not None:
             await self._session.close()

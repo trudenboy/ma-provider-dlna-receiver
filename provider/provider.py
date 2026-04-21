@@ -53,8 +53,9 @@ LOGGER = logging.getLogger(__name__)
 
 # External DLNA control points send arbitrary URIs; only HTTP(S) are safe to proxy.
 _ALLOWED_STREAM_SCHEMES = frozenset({"http", "https"})
-# DIDL-Lite metadata is normally < 4 KiB; bound input to guard CPU/memory on parse.
-_MAX_DIDL_BYTES = 64 * 1024
+# DIDL-Lite metadata is normally < 4 KiB; bound input (measured in characters)
+# to guard CPU/memory on parse.
+_MAX_DIDL_CHARS = 64 * 1024
 
 
 def _validate_stream_url(uri: str) -> str | None:
@@ -408,7 +409,18 @@ class DLNAReceiverProvider(PluginProvider):
                 aiohttp.ClientSession(timeout=timeout) as session,
                 session.get(stream_url) as resp,
             ):
-                if resp.status != 200:
+                # Re-validate after any redirects: the final URL still has to
+                # be an http(s) endpoint, otherwise refuse to stream. (aiohttp
+                # won't follow non-http schemes, but belt-and-suspenders.)
+                final_url = str(resp.url)
+                if _validate_stream_url(final_url) is None:
+                    LOGGER.warning(
+                        "Upstream DLNA source redirected to disallowed URL: %s",
+                        _redact_url(final_url),
+                    )
+                    return
+                # Accept any 2xx (e.g. 206 Partial Content is common for audio).
+                if not 200 <= resp.status < 300:
                     LOGGER.warning(
                         "Upstream DLNA source returned HTTP %s for %s",
                         resp.status,
@@ -444,13 +456,13 @@ class DLNAReceiverProvider(PluginProvider):
             return result
 
         # Bound untrusted input before parsing (normal DIDL is well under this).
-        if len(metadata) > _MAX_DIDL_BYTES:
+        if len(metadata) > _MAX_DIDL_CHARS:
             LOGGER.info(
                 "DIDL metadata truncated from %d to %d bytes",
                 len(metadata),
-                _MAX_DIDL_BYTES,
+                _MAX_DIDL_CHARS,
             )
-            metadata = metadata[:_MAX_DIDL_BYTES]
+            metadata = metadata[:_MAX_DIDL_CHARS]
 
         # SOAP bodies may contain XML-escaped DIDL-Lite content
         metadata = unescape(metadata)
