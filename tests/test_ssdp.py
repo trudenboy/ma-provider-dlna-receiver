@@ -6,6 +6,7 @@ from provider.ssdp import SSDPAdvertiser
 
 
 def test_ssdp_advertiser_init() -> None:
+    """SSDPAdvertiser stores its configured UDN, bind IP, and description URL."""
     adv = SSDPAdvertiser(
         udn="uuid:test-1234",
         description_url="http://192.168.1.100:8298/description.xml",
@@ -17,10 +18,10 @@ def test_ssdp_advertiser_init() -> None:
 
 
 def test_handle_search_ignores_non_matching() -> None:
+    """Non-M-SEARCH datagrams are silently dropped without raising."""
     adv = SSDPAdvertiser(
         udn="uuid:test-1234",
         description_url="http://192.168.1.100:8298/description.xml",
         bind_ip="192.168.1.100",
     )
-    # Non-M-SEARCH data should be silently ignored (no exception)
     adv.handle_search(b"NOTIFY * HTTP/1.1\r\n", ("192.168.1.1", 1900))

@@ -50,6 +50,7 @@ class UPnPRenderer:
         http_port: int = DEFAULT_HTTP_PORT,
         udn: str | None = None,
     ) -> None:
+        """Create a renderer bound to the given IP/port with a stable UDN."""
         self.friendly_name = friendly_name
         self.bind_ip = bind_ip
         self.http_port = http_port

@@ -29,6 +29,7 @@ async def client(renderer: UPnPRenderer) -> TestClient:
 
 
 async def test_device_description(client: TestClient) -> None:
+    """GET /description.xml returns the MediaRenderer device XML."""
     resp = await client.get("/description.xml")
     assert resp.status == 200
     text = await resp.text()
@@ -37,6 +38,7 @@ async def test_device_description(client: TestClient) -> None:
 
 
 async def test_get_transport_info(client: TestClient) -> None:
+    """GetTransportInfo returns NO_MEDIA_PRESENT before any URI is set."""
     resp = await client.post(
         "/AVTransport/control",
         headers={
@@ -50,6 +52,7 @@ async def test_get_transport_info(client: TestClient) -> None:
 
 
 async def test_set_volume(client: TestClient, renderer: UPnPRenderer) -> None:
+    """SetVolume updates renderer state and invokes the on_set_volume callback."""
     volume_received: list[int] = []
 
     async def _on_volume(v: int) -> None:
@@ -70,6 +73,7 @@ async def test_set_volume(client: TestClient, renderer: UPnPRenderer) -> None:
 
 
 async def test_get_protocol_info(client: TestClient) -> None:
+    """GetProtocolInfo advertises supported sink audio mime types."""
     resp = await client.post(
         "/ConnectionManager/control",
         headers={
@@ -88,6 +92,7 @@ async def test_get_protocol_info(client: TestClient) -> None:
 
 
 async def test_av_transport_scpd(client: TestClient) -> None:
+    """AVTransport SCPD exposes the expected actions and state variables."""
     resp = await client.get("/AVTransport/description.xml")
     assert resp.status == 200
     text = await resp.text()
@@ -101,6 +106,7 @@ async def test_av_transport_scpd(client: TestClient) -> None:
 
 
 async def test_rendering_control_scpd(client: TestClient) -> None:
+    """RenderingControl SCPD exposes volume/mute actions and allowed ranges."""
     resp = await client.get("/RenderingControl/description.xml")
     assert resp.status == 200
     text = await resp.text()
@@ -111,6 +117,7 @@ async def test_rendering_control_scpd(client: TestClient) -> None:
 
 
 async def test_connection_manager_scpd(client: TestClient) -> None:
+    """ConnectionManager SCPD exposes GetProtocolInfo and connection info."""
     resp = await client.get("/ConnectionManager/description.xml")
     assert resp.status == 200
     text = await resp.text()
@@ -185,6 +192,7 @@ async def test_seek_action(client: TestClient) -> None:
 
 
 async def test_get_position_info(client: TestClient) -> None:
+    """GetPositionInfo returns a SOAP response containing RelTime."""
     resp = await client.post(
         "/AVTransport/control",
         headers={
@@ -229,6 +237,7 @@ async def test_invalid_action(client: TestClient) -> None:
 
 
 async def test_set_mute(client: TestClient, renderer: UPnPRenderer) -> None:
+    """SetMute updates renderer state and GetMute reflects the change."""
     resp = await client.post(
         "/RenderingControl/control",
         headers={

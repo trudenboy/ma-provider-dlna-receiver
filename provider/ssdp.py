@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import socket
 
@@ -28,6 +29,7 @@ class SSDPAdvertiser:
         description_url: str,
         bind_ip: str,
     ) -> None:
+        """Store config; sockets and tasks are created in start()."""
         self.udn = udn
         self.description_url = description_url
         self.bind_ip = bind_ip
@@ -51,17 +53,15 @@ class SSDPAdvertiser:
         )
         send_sock.setblocking(False)
         self._transport, _ = await loop.create_datagram_endpoint(
-            lambda: _SSDPSendProtocol(),
+            _SSDPSendProtocol,
             sock=send_sock,
         )
 
         # Receiving socket — join multicast group on port 1900 for M-SEARCH
         recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
+        with contextlib.suppress(AttributeError, OSError):
             recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
-        except (AttributeError, OSError):
-            pass
         recv_sock.bind(("", SSDP_PORT))
         mreq = socket.inet_aton(SSDP_MULTICAST_ADDR) + socket.inet_aton(self.bind_ip)
         recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
@@ -206,6 +206,7 @@ class _SSDPRecvProtocol(asyncio.DatagramProtocol):
     """Asyncio UDP protocol for receiving SSDP M-SEARCH requests."""
 
     def __init__(self, advertiser: SSDPAdvertiser) -> None:
+        """Hold a reference to the advertiser that receives M-SEARCH datagrams."""
         self._advertiser = advertiser
 
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:

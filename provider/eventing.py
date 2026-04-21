@@ -7,6 +7,7 @@ for UPnP service state variable change notifications.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -44,6 +45,7 @@ class EventingManager:
     """
 
     def __init__(self) -> None:
+        """Initialize with no subscriptions and no background session."""
         self._subscriptions: dict[str, Subscription] = {}
         self._cleanup_task: asyncio.Task[None] | None = None
         self._pending_tasks: set[asyncio.Task[None]] = set()
@@ -60,10 +62,8 @@ class EventingManager:
         """Stop the cleanup task and clear all subscriptions."""
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
             self._cleanup_task = None
         if self._pending_tasks:
             for task in list(self._pending_tasks):
@@ -240,8 +240,8 @@ class EventingManager:
     def _parse_callback_header(header: str) -> list[str]:
         """Parse CALLBACK header: '<url1><url2>' -> ['url1', 'url2']."""
         urls: list[str] = []
-        for part in header.split(">"):
-            part = part.strip()
+        for raw in header.split(">"):
+            part = raw.strip()
             if part.startswith("<"):
                 url = part[1:]
                 if url.startswith("http"):

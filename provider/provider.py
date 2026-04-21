@@ -115,6 +115,7 @@ class DLNAReceiverProvider(PluginProvider):
         manifest: ProviderManifest,
         config: ProviderConfig,
     ) -> None:
+        """Initialize provider state; renderer instances are created in loaded_in_mass."""
         super().__init__(mass, manifest, config, self.SUPPORTED_FEATURES)
         self._instances: dict[str, RendererInstance] = {}
         self._plugin_source: PluginSource | None = None
@@ -230,10 +231,7 @@ class DLNAReceiverProvider(PluginProvider):
         http_port: int,
     ) -> RendererInstance:
         """Create and start a single renderer instance for a player."""
-        if player_name:
-            friendly_name = f"{friendly_prefix} — {player_name}"
-        else:
-            friendly_name = friendly_prefix
+        friendly_name = f"{friendly_prefix} — {player_name}" if player_name else friendly_prefix
 
         udn = self._deterministic_udn(player_id)
 
@@ -304,8 +302,8 @@ class DLNAReceiverProvider(PluginProvider):
 
         # Comma-separated list
         specs: list[tuple[str, str]] = []
-        for pid in raw.split(","):
-            pid = pid.strip()
+        for raw_pid in raw.split(","):
+            pid = raw_pid.strip()
             if pid:
                 name = self._get_player_name(pid)
                 specs.append((pid, name))
