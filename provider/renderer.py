@@ -197,7 +197,7 @@ class UPnPRenderer:
 
         IPv6 literals need square brackets in URL host components
         (RFC 3986 §3.2.2); without them the resulting URL would be
-        unparseable by strict control points consuming SSDP LOCATION.
+        unparsable by strict control points consuming SSDP LOCATION.
         """
         host = f"[{self.bind_ip}]" if ":" in self.bind_ip else self.bind_ip
         return f"http://{host}:{self.http_port}/description.xml"
