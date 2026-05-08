@@ -1,55 +1,104 @@
-# CLAUDE.md — Development guide for DLNA Receiver provider
+<!-- ma-provider-tools: rendered from wrappers/CLAUDE.md.j2 -->
+# CLAUDE.md
 
-## Project overview
+This file aligns development of the **DLNA Receiver** provider with the
+upstream [`music-assistant/server`](https://github.com/music-assistant/server)
+standards. It is rendered from `wrappers/CLAUDE.md.j2` in
+[`trudenboy/ma-provider-tools`](https://github.com/trudenboy/ma-provider-tools)
+and is kept in sync across every provider repo — **do not edit it here**.
 
-MA plugin provider that exposes Music Assistant as a UPnP/DLNA MediaRenderer.
-External apps send audio via standard DLNA protocol; MA routes it to any player.
+Provider-specific architecture, key flows, and gotchas live in
+[`CLAUDE.local.md`](./CLAUDE.local.md). Claude Code automatically picks up both
+files when working in this repository.
 
-## Architecture
+## Development Commands
 
-- **provider.py** — `DLNAReceiverProvider(PluginProvider)` with `AUDIO_SOURCE` feature
-- **renderer.py** — `UPnPRenderer` aiohttp server handling SOAP actions
-- **ssdp.py** — `SSDPAdvertiser` for multicast SSDP alive/byebye/search
-- **eventing.py** — `EventingManager` per-service GENA SUBSCRIBE/NOTIFY
-- **constants.py** — UPnP URNs, config keys, MIME types
+- `./scripts/setup.sh` — initial setup (venv via `uv`, dependencies, pre-commit hooks). Re-run after pulling latest code.
+- `uv run pytest` — run all tests
+- `uv run pytest provider/tests/<file>.py` — run a specific test file
+- `uv run ruff check provider/` — lint
+- `uv run ruff format provider/` — auto-format
+- `uv run mypy provider/` — type check
+- `pre-commit run --all-files` — full pre-commit gate
 
-## Key flows
+Always run `pre-commit run --all-files` after a code change to ensure the new
+code adheres to the project standards.
 
-1. **Discovery**: SSDP advertises MediaRenderer → control point finds it
-2. **SetAVTransportURI**: CP sends stream URL → stored in renderer state
-3. **Play**: Provider creates `PluginSource`, calls `play_plugin_source()` on target
-4. **Audio proxy**: `get_audio_stream()` fetches URL via aiohttp, yields chunks to MA pipeline
+## Code Style
 
-## Build & test
+### Comments
 
-```bash
-scripts/setup.sh          # One-time dev setup
-source .venv/bin/activate
-pytest                     # Run tests
-ruff check provider/       # Lint
-ruff format provider/      # Format
+Only use comments to explain complex, multi-line blocks of code. Do not comment
+obvious operations.
+
+### Docstring Format
+
+Use Sphinx-style docstrings with `:param:` syntax. For simple functions, a
+single-line docstring is fine.
+
+Don't explain inner workings of the code in the docstrings (you can use inline
+comments for that if/when needed). The docstring should provide clarity to the
+**caller** of the function/method, not explain how it works
+technically/internally.
+
+```python
+def my_function(param1: str, param2: int, param3: bool = False) -> str:
+    """
+    Brief one-line description of the function.
+
+    :param param1: Description of what param1 is used for.
+    :param param2: Description of what param2 is used for.
+    :param param3: Description of what param3 is used for.
+    """
 ```
 
-## Docker dev
+Do **not** use Google-style (`Args:`) or bullet-style (`- param:`) docstrings.
+AI assistants tend to generate Google-style by default — explicitly steer them
+to Sphinx, and rewrite anything that slips through.
 
-```bash
-docker compose -f docker-compose.dev.yml up
-```
+## Branching and PRs
 
-## CI
+- All work-in-progress PRs target `dev` (primary development branch).
+- Before opening a PR: run lint + tests + `pre-commit run --all-files`. CI runs `ruff format --check`, so pushing without `ruff format` is the most common red build.
 
-Uses `ma-provider-tools` wrapper workflows (ruff + mypy via trudenboy/ma-server fork).
+## Pull Request Workflow
 
-## Important notes
+All non-trivial changes go through a pull request — never push directly to
+`dev`. Inside a PR, follow this loop:
 
-- `network_mode: host` required in Docker for SSDP multicast
-- UPnP eventing (SUBSCRIBE/NOTIFY) is implemented in `eventing.py` via one
-  `EventingManager` per UPnP service; NOTIFY dispatch runs as tracked
-  background tasks and shares a single `aiohttp.ClientSession`
-- The SCPD XMLs are minimal stubs; full state variable tables would improve
-  compatibility with strict control points
-- Incoming DLNA URIs are validated (`http`/`https` only); the audio proxy in
-  `get_audio_stream` has per-chunk read and connect timeouts and logs a
-  redacted URL to avoid leaking userinfo credentials
-- `async-upnp-client` is in MA deps but we don't use it directly — we implement
-  the *server* side, not the client side
+1. **Self-review.** Run at least one self-review pass on the diff (e.g. the
+   `/code-review` skill or an equivalent reviewer) before asking for human
+   review.
+2. **Copilot triage.** Check the PR for GitHub Copilot review comments. For
+   each comment: analyze it, apply a fix when warranted, reply with a short
+   justification, and resolve the thread.
+3. **Version + changelog.** *After* review feedback is addressed, bump the
+   `VERSION` file (PEP 440 — `1.2.0` stable, `1.2.0b1` beta) and add a
+   `CHANGELOG.md` entry — in the same PR. The release pipeline tags and
+   publishes automatically when the new `VERSION` lands on `dev`.
+4. **Ask before merging.** Always request explicit maintainer approval to
+   merge. Do not self-merge or enable auto-merge without it. (Auto-merge is
+   reserved for `distribute.yml`-generated wrapper-sync PRs from
+   `ma-provider-tools`.)
+
+Follow-up commits driven by review (your own pass or Copilot's) land directly
+on the PR branch — no separate PR needed.
+
+## Upstream is Read-Only
+
+Never push to or open PRs against the upstream Music Assistant repo
+(`music-assistant/server` — the true upstream) or the integration fork
+(`trudenboy/ma-server`) without an explicit maintainer instruction. The
+provider repo is the source of truth; sync to the integration fork and
+upstream PR submission run automatically through `ma-provider-tools`
+workflows (`sync-to-fork.yml`, `upstream-pr.yml`).
+
+## Debugging
+
+Music Assistant stores its data in `$HOME/.musicassistant/`. When debugging
+locally:
+
+- **Logs:** `$HOME/.musicassistant/musicassistant.log` (current),
+  `musicassistant.log.1`, `.log.2`, etc. for older rotated logs.
+- **Database:** `$HOME/.musicassistant/library.db` — query via `sqlite3`.
+  **Only execute SELECT queries** — never write to a live database.
