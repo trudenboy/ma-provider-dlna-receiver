@@ -5,7 +5,7 @@
 [![CI](https://github.com/trudenboy/ma-provider-dlna-receiver/actions/workflows/test.yml/badge.svg)](https://github.com/trudenboy/ma-provider-dlna-receiver/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/trudenboy/ma-provider-dlna-receiver?display_name=tag)](https://github.com/trudenboy/ma-provider-dlna-receiver/releases/latest)
 [![License](https://img.shields.io/github/license/trudenboy/ma-provider-dlna-receiver)](LICENSE)
-[![Music Assistant](https://img.shields.io/endpoint?url=https%3A%2F%2Ftrudenboy.github.io%2Fma-provider-tools%2Fbadges%2Fdlna_receiver.json)](https://www.music-assistant.io/)
+[![Music Assistant](https://img.shields.io/badge/Music%20Assistant-9070B8?logo=python&logoColor=white)](https://www.music-assistant.io/)[![stable](https://img.shields.io/endpoint?url=https%3A%2F%2Ftrudenboy.github.io%2Fma-provider-tools%2Fbadges%2Fdlna_receiver-stable.json)](https://github.com/music-assistant/server/releases/latest)[![beta](https://img.shields.io/endpoint?url=https%3A%2F%2Ftrudenboy.github.io%2Fma-provider-tools%2Fbadges%2Fdlna_receiver-beta.json)](https://github.com/music-assistant/server/releases?q=prerelease)
 [![Stars](https://img.shields.io/github/stars/trudenboy/ma-provider-dlna-receiver?style=flat&logo=github)](https://github.com/trudenboy/ma-provider-dlna-receiver/stargazers)
 
 **📖 [Documentation](https://trudenboy.github.io/ma-provider-dlna-receiver/)** · **🔄 [Changelog](CHANGELOG.md)** · **🐛 [Issues](https://github.com/trudenboy/ma-provider-dlna-receiver/issues)** · **💬 [Discussions](https://github.com/trudenboy/ma-provider-dlna-receiver/discussions)**
