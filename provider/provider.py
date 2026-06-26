@@ -480,7 +480,7 @@ class DLNAReceiverProvider(PluginProvider):
     async def get_audio_stream(
         self,
         player_id: str,
-    ) -> AsyncGenerator[bytes, None]:
+    ) -> AsyncGenerator[bytes]:
         """Yield audio bytes from the received DLNA stream.
 
         MA calls this when the plugin source is activated on a player.
