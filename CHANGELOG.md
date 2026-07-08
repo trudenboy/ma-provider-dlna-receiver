@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.9] - 2026-07-08
+
+### Changed
+
+- Migrated to the new Music Assistant plugin sources architecture: each virtual DLNA renderer is now exposed as a first-class audio source (visible under "Live Inputs") and playback from a DLNA sender starts through the standard play flow.
+- Configuration entry labels and descriptions are now localizable instead of hardcoded English text.
+
 ## [1.1.8] - 2026-05-09
 
 ### Changed
