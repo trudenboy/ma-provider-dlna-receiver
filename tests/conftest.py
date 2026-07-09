@@ -39,7 +39,7 @@ def _wire_installed_music_assistant() -> None:
         stub.__path__.append(str(real_pkg))
     if "music_assistant.models" not in sys.modules:
         models_pkg = types.ModuleType("music_assistant.models")
-        models_pkg.__path__ = [str(real_pkg / "models")]  # type: ignore[attr-defined]
+        models_pkg.__path__ = [str(real_pkg / "models")]
         models_pkg.__package__ = "music_assistant.models"
         sys.modules["music_assistant.models"] = models_pkg
 
