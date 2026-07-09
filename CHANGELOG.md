@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.9] - 2026-07-08
+
+### Changed
+
+- Migrated to the new Music Assistant plugin sources architecture: each virtual DLNA renderer is now exposed as a first-class audio source and playback from a DLNA sender starts through the standard play flow.
+- Pausing the incoming DLNA stream from the Music Assistant UI is no longer offered (matching other receiver providers); pause from the sender app instead.
+- Configuration entry labels and descriptions are now localizable instead of hardcoded English text.
+
+### Fixed
+
+- Elapsed time and stream metadata are now tracked per renderer, so simultaneous casts to different renderers no longer corrupt each other's progress display.
+- Stopping playback from the Music Assistant side now stops the renderer's progress tracking instead of leaving it running in the background.
+- A renderer without an active cast now reports a clear error when playback is attempted, instead of playing silence.
+- Taking over an exclusive DLNA source from another player now stops the previous player first.
+- The fallback renderer (no target players configured) is startable again from the Live Inputs view.
+
 ## [1.1.8] - 2026-05-09
 
 ### Changed
