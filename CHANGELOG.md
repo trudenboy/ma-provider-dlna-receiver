@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3] - 2026-07-22
+
+### Fixed
+
+- Empty target-player configuration now exposes all available Music Assistant players and no longer advertises an unplayable unbound renderer while no players are registered.
+- DLNA `Play` now resumes paused playback without reopening the upstream stream or resetting elapsed time, and duplicate `Play` commands no longer restart an already-playing track.
+
 ## [1.2.1] - 2026-07-09
 
 ### Fixed
