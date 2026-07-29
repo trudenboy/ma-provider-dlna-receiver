@@ -86,7 +86,8 @@ def test_renderer_with_explicit_udn() -> None:
 @pytest.fixture
 def provider_cls() -> type[DLNAReceiverProvider]:
     """Return the real provider class."""
-    return DLNAReceiverProvider
+    provider_type: type[DLNAReceiverProvider] = DLNAReceiverProvider
+    return provider_type
 
 
 class _StubConfig:
