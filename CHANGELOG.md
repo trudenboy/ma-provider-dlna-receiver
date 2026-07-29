@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.4] - 2026-07-29
+
+### Fixed
+
+- Prevented DLNA renderers discovered by Music Assistant from being selected as new receiver targets and creating a recursive renderer loop.
+- Playback state now returns to stopped when Music Assistant ends a cast, while the current stream remains available for a subsequent Play command.
+- Unsupported seek requests now return a standards-compliant SOAP error instead of an opaque server error.
+- DLNA control points now receive current playback position and duration, ordered event notifications, and standards-compliant discovery responses.
+- The provider now displays a cast-audio icon in the Music Assistant interface.
+
+### Security
+
+- Limited active event subscriptions and their lifetime to prevent unbounded memory and notification-task growth from devices on the local network.
+
 ## [1.2.3] - 2026-07-22
 
 ### Fixed
