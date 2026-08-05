@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.5] - 2026-08-05
+
+### Changed
+
+- Renderer creation and cleanup now react immediately when Music Assistant players are added or removed.
+
+### Fixed
+
+- Provider options are now available on loaded instances with safe defaults and legacy target-player compatibility.
+- Prevented receiver renderers from being selected recursively by matching their device UUID identifiers.
+- DLNA control points now receive accurate Play failures, external stop notifications, and media duration.
+- Oversized or malformed DIDL metadata is rejected safely, while unexpected task and eventing errors remain visible.
+
 ## [1.2.4] - 2026-07-29
 
 ### Fixed
