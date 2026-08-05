@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 
 import aiohttp
 import pytest
@@ -256,7 +257,7 @@ async def test_notify_does_not_hide_unexpected_session_errors() -> None:
         def request(self, *_args: object, **_kwargs: object) -> object:
             raise RuntimeError("session contract broken")
 
-    manager = EventingManager(session=_BrokenSession())  # type: ignore[arg-type]
+    manager = EventingManager(session=cast("aiohttp.ClientSession", _BrokenSession()))
     sid, _timeout = manager.subscribe("<http://receiver.local/callback>")
 
     with pytest.raises(RuntimeError, match="session contract broken"):
@@ -272,7 +273,7 @@ async def test_notify_treats_client_errors_as_delivery_failures() -> None:
         def request(self, *_args: object, **_kwargs: object) -> object:
             raise aiohttp.ClientConnectionError("offline")
 
-    manager = EventingManager(session=_OfflineSession())  # type: ignore[arg-type]
+    manager = EventingManager(session=cast("aiohttp.ClientSession", _OfflineSession()))
     sid, _timeout = manager.subscribe("<http://receiver.local/callback>")
 
     await manager._send_notify(manager._subscriptions[sid], "<propertyset/>")
