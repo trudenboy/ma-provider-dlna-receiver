@@ -6,7 +6,7 @@
 
 **Architecture:** Replace the two overlapping `from provider import provider` statements with the supported aliased dotted-import form. Keep runtime code unchanged, then verify the synced test source by executing the real `ma-provider-tools` transform and parsing its output before publishing patch-release metadata.
 
-**Tech Stack:** Python 3.12+, pytest, Ruff, mypy, pre-commit, `ma-provider-tools/scripts/_transform.py`.
+**Tech Stack:** Python 3.14+, pytest, Ruff, mypy, pre-commit, `ma-provider-tools/scripts/_transform.py`.
 
 ## Global Constraints
 
