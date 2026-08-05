@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.6] - 2026-08-05
+
+### Fixed
+
+- Provider tests now retain valid module imports when synchronized into the Music Assistant server repository.
+
 ## [1.2.5] - 2026-08-05
 
 ### Changed
