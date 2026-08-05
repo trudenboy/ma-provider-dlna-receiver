@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import pytest
 from music_assistant_models.enums import ContentType, MediaType, QueueOption, StreamType
-from music_assistant_models.errors import MusicAssistantError
+from music_assistant_models.errors import MusicAssistantError, SetupFailedError
 from music_assistant_models.streamdetails import StreamMetadata
 
 from music_assistant.constants import CONF_BIND_IP
@@ -189,6 +189,90 @@ async def test_loaded_without_players_does_not_create_unbound_renderer(provider_
         assert prov._registry is not None
     finally:
         await prov.unload()
+
+
+async def test_loaded_publishes_registry_instances_while_start_is_in_progress(
+    provider_cls: type[DLNAReceiverProvider],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A started renderer must expose its AudioSource before the full batch finishes."""
+    from provider import provider as provider_module  # noqa: PLC0415
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class _GatedRegistry:
+        """Registry double that publishes one instance before startup completes."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            self.instances: dict[str, RendererInstance] = {}
+
+        async def start(self) -> None:
+            self.instances["player_kitchen"] = _make_instance(
+                "player_kitchen",
+                "Kitchen",
+                "http://cp.local/track.flac",
+            )
+            entered.set()
+            await release.wait()
+
+        async def stop(self) -> None:
+            self.instances.clear()
+
+    monkeypatch.setattr(provider_module, "RendererRegistry", _GatedRegistry)
+    mass = _mass_stub(cache=None)
+    prov = provider_cls(
+        cast("Any", mass),
+        cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
+        cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
+    )
+    load_task = asyncio.create_task(prov.loaded_in_mass())
+    await entered.wait()
+
+    try:
+        sources = await prov.get_audio_sources()
+        streamdetails = await prov.get_stream_details("player_kitchen", "queue1")
+        assert [source.item_id for source in sources] == ["player_kitchen"]
+        assert streamdetails.item_id == "player_kitchen"
+    finally:
+        release.set()
+        await load_task
+        await prov.unload()
+
+
+async def test_loaded_reports_registry_start_failure_and_returns(
+    provider_cls: type[DLNAReceiverProvider],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A post-load startup failure must schedule provider unload with its original error."""
+    from provider import provider as provider_module  # noqa: PLC0415
+
+    start_error = SetupFailedError("SSDP unavailable")
+
+    class _FailingRegistry:
+        """Registry double that fails after construction."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            self.instances: dict[str, RendererInstance] = {}
+
+        async def start(self) -> None:
+            raise start_error
+
+        async def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(provider_module, "RendererRegistry", _FailingRegistry)
+    prov = provider_cls(
+        cast("Any", _mass_stub(cache=None)),
+        cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
+        cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
+    )
+    reported: list[Exception] = []
+    monkeypatch.setattr(prov, "unload_with_error", reported.append)
+
+    await prov.loaded_in_mass()
+
+    assert reported == [start_error]
 
 
 # ---------------------------------------------------------------------

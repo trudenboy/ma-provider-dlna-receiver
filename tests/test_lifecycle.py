@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
 
@@ -18,6 +19,8 @@ class _FakeRenderer:
 
     actions: ClassVar[list[tuple[str, str]]] = []
     start_gate: ClassVar[asyncio.Event | None] = None
+    fail_start_udn: ClassVar[str | None] = None
+    fail_stop_udns: ClassVar[set[str]] = set()
 
     def __init__(
         self,
@@ -36,18 +39,24 @@ class _FakeRenderer:
     async def start(self) -> None:
         """Record startup."""
         self.actions.append(("renderer-start", self.udn))
+        if self.udn == self.fail_start_udn:
+            raise RuntimeError("renderer start failed")
         if self.start_gate is not None:
             await self.start_gate.wait()
 
     async def stop(self) -> None:
         """Record shutdown."""
         self.actions.append(("renderer-stop", self.udn))
+        if self.udn in self.fail_stop_udns:
+            raise RuntimeError("renderer stop failed")
 
 
 class _FakeSSDP:
     """Network-free SSDP advertiser with observable lifecycle state."""
 
     actions = _FakeRenderer.actions
+    fail_start_udn: ClassVar[str | None] = None
+    fail_stop_udns: ClassVar[set[str]] = set()
 
     def __init__(self, udn: str, description_url: str, bind_ip: str) -> None:
         del bind_ip
@@ -57,10 +66,14 @@ class _FakeSSDP:
     async def start(self) -> None:
         """Record startup."""
         self.actions.append(("ssdp-start", self.udn))
+        if self.udn == self.fail_start_udn:
+            raise RuntimeError("SSDP start failed")
 
     async def stop(self) -> None:
         """Record byebye and shutdown."""
         self.actions.append(("ssdp-stop", self.udn))
+        if self.udn in self.fail_stop_udns:
+            raise RuntimeError("SSDP stop failed")
 
 
 class _Players:
@@ -165,6 +178,10 @@ def _network_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     _FakeRenderer.actions.clear()
     _FakeRenderer.start_gate = None
+    _FakeRenderer.fail_start_udn = None
+    _FakeRenderer.fail_stop_udns.clear()
+    _FakeSSDP.fail_start_udn = None
+    _FakeSSDP.fail_stop_udns.clear()
     monkeypatch.setattr(lifecycle, "UPnPRenderer", _FakeRenderer)
     monkeypatch.setattr(lifecycle, "SSDPAdvertiser", _FakeSSDP)
 
@@ -190,6 +207,56 @@ async def test_start_subscribes_before_initial_player_scan() -> None:
     assert mass.subscription is not None
     assert mass.subscription[1] == (EventType.PLAYER_ADDED, EventType.PLAYER_REMOVED)
     await registry.stop()
+
+
+async def test_start_rolls_back_started_instances_and_subscription_on_failure() -> None:
+    """A failed initial renderer cannot leave earlier renderers or subscriptions alive."""
+    mass = _Mass(
+        [
+            _player("kitchen", "Kitchen", "device-kitchen"),
+            _player("bedroom", "Bedroom", "device-bedroom"),
+        ]
+    )
+    registry = RendererRegistry(
+        mass=cast("Any", mass),
+        target_spec="*",
+        friendly_prefix="Music Assistant",
+        bind_ip="192.0.2.10",
+        base_port=8298,
+        callbacks=_callbacks(),
+    )
+    kitchen_udn = deterministic_udn("kitchen")
+    _FakeSSDP.fail_start_udn = deterministic_udn("bedroom")
+
+    with pytest.raises(RuntimeError, match="SSDP start failed"):
+        await registry.start()
+
+    assert registry.instances == {}
+    assert mass.subscription is None
+    assert ("ssdp-stop", kitchen_udn) in _FakeRenderer.actions
+    assert ("renderer-stop", kitchen_udn) in _FakeRenderer.actions
+
+
+async def test_renderer_start_failure_stops_partial_renderer() -> None:
+    """A renderer start failure cannot leave its partially initialized HTTP server alive."""
+    mass = _Mass([_player("kitchen", "Kitchen", "device-kitchen")])
+    registry = RendererRegistry(
+        mass=cast("Any", mass),
+        target_spec="*",
+        friendly_prefix="Music Assistant",
+        bind_ip="192.0.2.10",
+        base_port=8298,
+        callbacks=_callbacks(),
+    )
+    kitchen_udn = deterministic_udn("kitchen")
+    _FakeRenderer.fail_start_udn = kitchen_udn
+
+    with pytest.raises(RuntimeError, match="renderer start failed"):
+        await registry.start()
+
+    assert ("renderer-stop", kitchen_udn) in _FakeRenderer.actions
+    assert registry.instances == {}
+    assert mass.subscription is None
 
 
 async def test_player_events_remove_immediately_and_reuse_port_on_add() -> None:
@@ -219,6 +286,45 @@ async def test_player_events_remove_immediately_and_reuse_port_on_add() -> None:
 
     assert registry.instances["kitchen"].renderer.http_port == first_port
     await registry.stop()
+
+
+async def test_stop_attempts_every_cleanup_and_reports_all_failures() -> None:
+    """One teardown failure cannot skip another resource, callback, or instance."""
+    mass = _Mass(
+        [
+            _player("kitchen", "Kitchen", "device-kitchen"),
+            _player("bedroom", "Bedroom", "device-bedroom"),
+        ]
+    )
+    removed: list[str] = []
+    callbacks = replace(
+        _callbacks(),
+        on_instance_removed=lambda source_id, _instance: removed.append(source_id),
+    )
+    registry = RendererRegistry(
+        mass=cast("Any", mass),
+        target_spec="*",
+        friendly_prefix="Music Assistant",
+        bind_ip="192.0.2.10",
+        base_port=8298,
+        callbacks=callbacks,
+    )
+    await registry.start()
+    kitchen_udn = deterministic_udn("kitchen")
+    bedroom_udn = deterministic_udn("bedroom")
+    _FakeSSDP.fail_stop_udns.add(kitchen_udn)
+    _FakeRenderer.fail_stop_udns.add(bedroom_udn)
+
+    with pytest.raises(ExceptionGroup) as exc_info:
+        await registry.stop()
+
+    assert registry.instances == {}
+    assert mass.subscription is None
+    assert removed == ["kitchen", "bedroom"]
+    for udn in (kitchen_udn, bedroom_udn):
+        assert ("ssdp-stop", udn) in _FakeRenderer.actions
+        assert ("renderer-stop", udn) in _FakeRenderer.actions
+    assert len(exc_info.value.exceptions) == 2
 
 
 async def test_all_players_filters_renderer_by_uuid_identifier() -> None:

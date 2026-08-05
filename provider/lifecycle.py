@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
@@ -87,9 +86,16 @@ class RendererRegistry:
             self._on_player_event,
             (EventType.PLAYER_ADDED, EventType.PLAYER_REMOVED),
         )
-        async with self._lock:
-            for player_id, player_name in self._initial_player_specs():
-                await self._create_instance(player_id, player_name)
+        try:
+            async with self._lock:
+                for player_id, player_name in self._initial_player_specs():
+                    await self._create_instance(player_id, player_name)
+        except BaseException:
+            try:
+                await self.stop()
+            except Exception:
+                LOGGER.exception("Failed to roll back renderer registry startup")
+            raise
 
     async def stop(self) -> None:
         """Unsubscribe and stop all renderer instances."""
@@ -98,8 +104,14 @@ class RendererRegistry:
             self._unsubscribe()
             self._unsubscribe = None
         async with self._lock:
+            errors: list[Exception] = []
             for source_id in list(self.instances):
-                await self._remove_instance(source_id)
+                try:
+                    await self._remove_instance(source_id)
+                except Exception as err:
+                    errors.append(err)
+            if errors:
+                raise ExceptionGroup("Failed to stop renderer registry", errors)
 
     def _on_player_event(self, event: MassEvent) -> None:
         """Schedule reconciliation for an added or removed player."""
@@ -217,15 +229,15 @@ class RendererRegistry:
         renderer.on_set_volume = lambda volume: self._callbacks.on_set_volume(instance, volume)
         renderer.on_set_mute = lambda mute: self._callbacks.on_set_mute(instance, mute)
 
-        await renderer.start()
-        instance.ssdp.description_url = renderer.description_url
         try:
+            await renderer.start()
+            instance.ssdp.description_url = renderer.description_url
             await instance.ssdp.start()
-        except Exception:
-            with contextlib.suppress(Exception):
-                await instance.ssdp.stop()
-            with contextlib.suppress(Exception):
-                await renderer.stop()
+        except BaseException:
+            try:
+                await self._stop_instance_resources(instance)
+            except Exception:
+                LOGGER.exception("Failed to clean up renderer after startup failure")
             raise
 
         self.instances[player_id] = instance
@@ -243,9 +255,29 @@ class RendererRegistry:
         instance = self.instances.pop(source_id, None)
         if instance is None:
             return
-        await instance.ssdp.stop()
-        await instance.renderer.stop()
-        self._callbacks.on_instance_removed(source_id, instance)
+        errors: list[Exception] = []
+        try:
+            await self._stop_instance_resources(instance)
+        except Exception as err:
+            errors.append(err)
+        try:
+            self._callbacks.on_instance_removed(source_id, instance)
+        except Exception as err:
+            errors.append(err)
+        if errors:
+            raise ExceptionGroup(f"Failed to remove renderer {source_id}", errors)
+
+    @staticmethod
+    async def _stop_instance_resources(instance: RendererInstance) -> None:
+        """Attempt to stop every network resource owned by an instance."""
+        errors: list[Exception] = []
+        for stop in (instance.ssdp.stop, instance.renderer.stop):
+            try:
+                await stop()
+            except Exception as err:
+                errors.append(err)
+        if errors:
+            raise ExceptionGroup("Failed to stop renderer resources", errors)
 
     @staticmethod
     def _display_name(player: Any) -> str:

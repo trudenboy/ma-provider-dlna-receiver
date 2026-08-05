@@ -211,8 +211,12 @@ class DLNAReceiverProvider(PluginProvider):
                 on_instance_removed=self._on_instance_removed,
             ),
         )
-        await self._registry.start()
         self._instances = self._registry.instances
+        try:
+            await self._registry.start()
+        except Exception as err:
+            self.unload_with_error(err)
+            return
 
         if not self._instances:
             LOGGER.info(
