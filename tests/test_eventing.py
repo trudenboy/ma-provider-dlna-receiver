@@ -245,3 +245,34 @@ async def test_owned_session_is_closed_on_stop() -> None:
     assert owned is not None
     await mgr.stop()
     assert owned.closed
+
+
+async def test_notify_does_not_hide_unexpected_session_errors() -> None:
+    """Unexpected request failures surface instead of looking like network loss."""
+
+    class _BrokenSession:
+        closed = False
+
+        def request(self, *_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("session contract broken")
+
+    manager = EventingManager(session=_BrokenSession())  # type: ignore[arg-type]
+    sid, _timeout = manager.subscribe("<http://receiver.local/callback>")
+
+    with pytest.raises(RuntimeError, match="session contract broken"):
+        await manager._send_notify(manager._subscriptions[sid], "<propertyset/>")
+
+
+async def test_notify_treats_client_errors_as_delivery_failures() -> None:
+    """Expected aiohttp errors exhaust callback URLs without escaping."""
+
+    class _OfflineSession:
+        closed = False
+
+        def request(self, *_args: object, **_kwargs: object) -> object:
+            raise aiohttp.ClientConnectionError("offline")
+
+    manager = EventingManager(session=_OfflineSession())  # type: ignore[arg-type]
+    sid, _timeout = manager.subscribe("<http://receiver.local/callback>")
+
+    await manager._send_notify(manager._subscriptions[sid], "<propertyset/>")
