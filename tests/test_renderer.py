@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 import pytest
+from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from provider.metadata import parse_didl_metadata
@@ -420,6 +422,50 @@ async def test_set_av_transport_uri_rejected(
     assert "<errorCode>716</errorCode>" in text
     # State was NOT mutated by the rejected request.
     assert renderer.current_uri == "http://prior.example/stream.flac"
+
+
+async def test_subscribe_response_completes_before_slow_initial_notify(
+    client: TestClient[Request, Application],
+    renderer: UPnPRenderer,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A slow callback cannot delay the SUBSCRIBE response carrying its SID."""
+    import provider.eventing as eventing_module  # noqa: PLC0415
+
+    callback_entered = asyncio.Event()
+    release_callback = asyncio.Event()
+
+    async def _allow_test_server(url: str) -> str:
+        return url
+
+    async def _slow_notify(_request: Request) -> web.Response:
+        callback_entered.set()
+        await release_callback.wait()
+        return web.Response(status=200)
+
+    monkeypatch.setattr(eventing_module, "validate_outbound_url", _allow_test_server)
+    callback_app = web.Application()
+    callback_app.router.add_route("NOTIFY", "/callback", _slow_notify)
+    callback_server = TestServer(callback_app)
+    await callback_server.start_server()
+    await renderer._evt_av_transport.start()
+    response_task = asyncio.create_task(
+        client.request(
+            "SUBSCRIBE",
+            "/AVTransport/event",
+            headers={"CALLBACK": f"<{callback_server.make_url('/callback')}>"},
+        )
+    )
+    try:
+        await asyncio.wait_for(callback_entered.wait(), timeout=1)
+        response = await asyncio.wait_for(asyncio.shield(response_task), timeout=0.2)
+        assert response.status == 200
+        assert response.headers["SID"].startswith("uuid:")
+    finally:
+        release_callback.set()
+        await response_task
+        await renderer._evt_av_transport.stop()
+        await callback_server.close()
 
 
 def test_description_url_brackets_ipv6() -> None:
