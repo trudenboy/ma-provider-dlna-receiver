@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.7] - 2026-08-12
+
+### Changed
+
+- Target players can now be selected directly from the available Music Assistant players.
+
+### Fixed
+
+- DLNA metadata containing escaped XML characters now retains its title, artist, album, artwork, and duration.
+- Provider startup failures now appear through the standard Music Assistant provider error flow.
+- Plugin source streaming now follows the current Music Assistant stream-details contract.
+- Initial UPnP event notifications no longer delay subscription responses.
+
+### Security
+
+- Incoming stream URLs, redirects, and event callbacks now reject loopback and unsafe special-purpose network destinations.
+
 ## [1.2.6] - 2026-08-05
 
 ### Fixed
