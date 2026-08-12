@@ -115,7 +115,7 @@ class DLNAReceiverProvider(PluginProvider):
         manifest: ProviderManifest,
         config: ProviderConfig,
     ) -> None:
-        """Initialize provider state; renderer instances are created in loaded_in_mass."""
+        """Initialize provider state before asynchronous setup."""
         super().__init__(mass, manifest, config, self.SUPPORTED_FEATURES)
         self._instances: dict[str, RendererInstance] = {}
         self._registry: RendererRegistry | None = None
@@ -125,11 +125,6 @@ class DLNAReceiverProvider(PluginProvider):
         # on_source_unselected when the session token matches.
         self._claims: dict[str, tuple[str, str]] = {}
         self._metadata_task: asyncio.Task[None] | None = None
-
-    @property
-    def supported_features(self) -> set[ProviderFeature]:
-        """Return supported features."""
-        return {ProviderFeature.AUDIO_SOURCE}
 
     async def get_config_entries(self) -> tuple[ConfigEntry, ...]:
         """Return editable options for this provider instance."""
@@ -163,8 +158,8 @@ class DLNAReceiverProvider(PluginProvider):
     # Lifecycle
     # ------------------------------------------------------------------
 
-    async def loaded_in_mass(self) -> None:
-        """Initialize renderer instances when loaded in Music Assistant."""
+    async def handle_async_init(self) -> None:
+        """Initialize renderer instances during the awaited provider load phase."""
         self._friendly_prefix = str(
             self.config.get_value(CONF_FRIENDLY_NAME) or DEFAULT_FRIENDLY_NAME,
         )
@@ -212,11 +207,7 @@ class DLNAReceiverProvider(PluginProvider):
             ),
         )
         self._instances = self._registry.instances
-        try:
-            await self._registry.start()
-        except Exception as err:
-            self.unload_with_error(err)
-            return
+        await self._registry.start()
 
         if not self._instances:
             LOGGER.info(

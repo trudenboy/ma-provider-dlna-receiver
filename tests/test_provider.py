@@ -162,7 +162,7 @@ def test_manifest_uses_canonical_docs_without_unused_credit() -> None:
     assert "credits" not in manifest
 
 
-async def test_loaded_without_players_does_not_create_unbound_renderer(provider_cls) -> None:  # type: ignore[no-untyped-def]
+async def test_async_init_without_players_does_not_create_unbound_renderer(provider_cls) -> None:  # type: ignore[no-untyped-def]
     """The all-players default waits instead of advertising a dead renderer."""
 
     def _all_players(**_kwargs: object) -> list[object]:
@@ -183,7 +183,7 @@ async def test_loaded_without_players_does_not_create_unbound_renderer(provider_
         cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
     )
 
-    await prov.loaded_in_mass()
+    await prov.handle_async_init()
     try:
         assert prov._instances == {}
         assert prov._registry is not None
@@ -191,7 +191,7 @@ async def test_loaded_without_players_does_not_create_unbound_renderer(provider_
         await prov.unload()
 
 
-async def test_loaded_publishes_registry_instances_while_start_is_in_progress(
+async def test_async_init_publishes_registry_instances_while_start_is_in_progress(
     provider_cls: type[DLNAReceiverProvider],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -226,7 +226,7 @@ async def test_loaded_publishes_registry_instances_while_start_is_in_progress(
         cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
         cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
     )
-    load_task = asyncio.create_task(prov.loaded_in_mass())
+    load_task = asyncio.create_task(prov.handle_async_init())
     await entered.wait()
 
     try:
@@ -242,11 +242,11 @@ async def test_loaded_publishes_registry_instances_while_start_is_in_progress(
         await prov.unload()
 
 
-async def test_loaded_reports_registry_start_failure_and_returns(
+async def test_async_init_propagates_registry_start_failure(
     provider_cls: type[DLNAReceiverProvider],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A post-load startup failure must schedule provider unload with its original error."""
+    """A startup failure must leave awaited provider initialization unchanged."""
     import provider.provider as provider_module  # noqa: PLC0415
 
     start_error = SetupFailedError("SSDP unavailable")
@@ -269,12 +269,48 @@ async def test_loaded_reports_registry_start_failure_and_returns(
         cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
         cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
     )
-    reported: list[Exception] = []
-    monkeypatch.setattr(prov, "unload_with_error", reported.append)
+    with pytest.raises(SetupFailedError, match="SSDP unavailable") as exc_info:
+        await prov.handle_async_init()
+
+    assert exc_info.value is start_error
+
+
+async def test_async_init_rejects_invalid_bind_ip(
+    provider_cls: type[DLNAReceiverProvider],
+) -> None:
+    """Invalid bind configuration fails during the awaited load phase."""
+    prov = provider_cls(
+        cast("Any", _mass_stub(cache=None)),
+        cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
+        cast("Any", _StubConfig({CONF_BIND_IP: "not-an-ip"})),
+    )
+
+    with pytest.raises(SetupFailedError, match="concrete IPv4 bind address"):
+        await prov.handle_async_init()
+
+
+async def test_loaded_in_mass_does_not_open_network_resources(
+    provider_cls: type[DLNAReceiverProvider], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The post-registration hook cannot create or start a renderer registry."""
+    import provider.provider as provider_module  # noqa: PLC0415
+
+    class _UnexpectedRegistry:
+        """Fail if the post-registration hook tries to open network resources."""
+
+        def __init__(self, **_kwargs: object) -> None:
+            pytest.fail("loaded_in_mass constructed RendererRegistry")
+
+    monkeypatch.setattr(provider_module, "RendererRegistry", _UnexpectedRegistry)
+    prov = provider_cls(
+        cast("Any", _mass_stub(cache=None)),
+        cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
+        cast("Any", _StubConfig({CONF_BIND_IP: "192.168.1.20"})),
+    )
 
     await prov.loaded_in_mass()
 
-    assert reported == [start_error]
+    assert prov._registry is None
 
 
 # ---------------------------------------------------------------------
