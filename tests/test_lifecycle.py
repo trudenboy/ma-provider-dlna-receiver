@@ -194,7 +194,7 @@ async def test_start_subscribes_before_initial_player_scan() -> None:
     )
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -209,6 +209,29 @@ async def test_start_subscribes_before_initial_player_scan() -> None:
     await registry.stop()
 
 
+async def test_explicit_targets_skip_unselected_and_missing_players() -> None:
+    """An explicit allowlist creates renderers only for selected present players."""
+    mass = _Mass(
+        [
+            _player("kitchen", "Kitchen", "device-kitchen"),
+            _player("bedroom", "Bedroom", "device-bedroom"),
+        ]
+    )
+    registry = RendererRegistry(
+        mass=cast("Any", mass),
+        target_player_ids=frozenset({"kitchen", "missing"}),
+        friendly_prefix="Music Assistant",
+        bind_ip="192.0.2.10",
+        base_port=8298,
+        callbacks=_callbacks(),
+    )
+
+    await registry.start()
+
+    assert set(registry.instances) == {"kitchen"}
+    await registry.stop()
+
+
 async def test_start_rolls_back_started_instances_and_subscription_on_failure() -> None:
     """A failed initial renderer cannot leave earlier renderers or subscriptions alive."""
     mass = _Mass(
@@ -219,7 +242,7 @@ async def test_start_rolls_back_started_instances_and_subscription_on_failure() 
     )
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -242,7 +265,7 @@ async def test_renderer_start_failure_stops_partial_renderer() -> None:
     mass = _Mass([_player("kitchen", "Kitchen", "device-kitchen")])
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -265,7 +288,7 @@ async def test_player_events_remove_immediately_and_reuse_port_on_add() -> None:
     mass = _Mass([player])
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset({"kitchen"}),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -303,7 +326,7 @@ async def test_stop_attempts_every_cleanup_and_reports_all_failures() -> None:
     )
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -338,7 +361,7 @@ async def test_all_players_filters_renderer_by_uuid_identifier() -> None:
     mass = _Mass([native, own_renderer])
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -356,7 +379,7 @@ async def test_stop_unsubscribes_and_ignores_late_events() -> None:
     mass = _Mass([])
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,
@@ -380,7 +403,7 @@ async def test_remove_during_start_finishes_then_cleans_up_renderer() -> None:
     mass = _Mass([])
     registry = RendererRegistry(
         mass=cast("Any", mass),
-        target_spec="*",
+        target_player_ids=frozenset(),
         friendly_prefix="Music Assistant",
         bind_ip="192.0.2.10",
         base_port=8298,

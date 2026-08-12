@@ -20,10 +20,11 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, ClassVar
 
 import aiohttp
-from music_assistant_models.config_entries import ConfigEntry
+from music_assistant_models.config_entries import ConfigEntry, ConfigValueOption
 from music_assistant_models.enums import (
     ConfigEntryType,
     ContentType,
+    IdentifierType,
     MediaType,
     ProviderFeature,
     QueueOption,
@@ -47,7 +48,6 @@ from music_assistant.models.plugin import PluginProvider
 from .constants import (
     CONF_FRIENDLY_NAME,
     CONF_HTTP_PORT,
-    CONF_TARGET_PLAYER,
     CONF_TARGET_PLAYERS,
     DEFAULT_FRIENDLY_NAME,
     DEFAULT_HTTP_PORT,
@@ -55,7 +55,12 @@ from .constants import (
     TRANSPORT_STATE_PLAYING,
     TRANSPORT_STATE_STOPPED,
 )
-from .lifecycle import RendererCallbacks, RendererRegistry
+from .lifecycle import (
+    RendererCallbacks,
+    RendererRegistry,
+    deterministic_udn,
+    normalize_udn_uuid,
+)
 from .metadata import (
     clear_playback,
     freeze_elapsed,
@@ -72,6 +77,7 @@ if TYPE_CHECKING:
     from music_assistant_models.provider import ProviderManifest
 
     from music_assistant.mass import MusicAssistant
+    from music_assistant.models.player import Player
 
 LOGGER = logging.getLogger(__name__)
 
@@ -138,8 +144,10 @@ class DLNAReceiverProvider(PluginProvider):
             ConfigEntry(
                 key=CONF_TARGET_PLAYERS,
                 type=ConfigEntryType.STRING,
-                default_value="*",
+                default_value=[],
                 required=False,
+                options=self._target_player_options(),
+                multi_value=True,
             ),
             ConfigEntry(
                 key=CONF_BIND_IP,
@@ -191,7 +199,7 @@ class DLNAReceiverProvider(PluginProvider):
         )
         self._registry = RendererRegistry(
             mass=self.mass,
-            target_spec=self._raw_target(),
+            target_player_ids=self._configured_target_player_ids(),
             friendly_prefix=self._friendly_prefix,
             bind_ip=self._bind_ip,
             base_port=base_port,
@@ -397,16 +405,42 @@ class DLNAReceiverProvider(PluginProvider):
             await inst.renderer.set_transport_state(TRANSPORT_STATE_STOPPED)
             clear_playback(inst)
 
-    def _raw_target(self) -> str:
-        """
-        Return the configured target spec, defaulting to all players.
+    def _configured_target_player_ids(self) -> frozenset[str]:
+        """Return the configured exact player allowlist, or empty for all players."""
+        value = self.config.get_value(CONF_TARGET_PLAYERS)
+        if not isinstance(value, list):
+            return frozenset()
+        return frozenset(item for item in value if isinstance(item, str) and item)
 
-        Preserve the legacy single-player key for existing installations.
-        """
-        raw = str(self.config.get_value(CONF_TARGET_PLAYERS) or "").strip()
-        if not raw:
-            raw = str(self.config.get_value(CONF_TARGET_PLAYER) or "").strip()
-        return raw or "*"
+    def _target_player_options(self) -> list[ConfigValueOption]:
+        """Return selectable MA players plus unavailable saved selections."""
+        selected_ids = self._configured_target_player_ids()
+        players: list[Player] = self.mass.players.all_players(
+            return_unavailable=True,
+            return_protocol_players=False,
+        )
+        candidate_uuids = {
+            normalize_udn_uuid(deterministic_udn(player_id))
+            for player_id in ({player.player_id for player in players} | set(selected_ids))
+        }
+        available_players = [
+            player
+            for player in players
+            if not (
+                (identifier := player.device_info.identifiers.get(IdentifierType.UUID))
+                and normalize_udn_uuid(identifier) in candidate_uuids
+            )
+        ]
+        options = [
+            ConfigValueOption(player.player_id, title=player.display_name)
+            for player in available_players
+        ]
+        available_ids = {player.player_id for player in available_players}
+        options.extend(
+            ConfigValueOption(player_id, title=player_id, disabled=True)
+            for player_id in selected_ids - available_ids
+        )
+        return sorted(options, key=lambda option: (str(option.title).casefold(), str(option.value)))
 
     # ------------------------------------------------------------------
     # AudioSource helpers

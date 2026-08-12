@@ -16,14 +16,19 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from music_assistant_models.enums import ContentType, MediaType, QueueOption, StreamType
+from music_assistant_models.enums import (
+    ContentType,
+    IdentifierType,
+    MediaType,
+    QueueOption,
+    StreamType,
+)
 from music_assistant_models.errors import MediaNotFoundError, MusicAssistantError, SetupFailedError
 from music_assistant_models.streamdetails import StreamMetadata
 
 from music_assistant.constants import CONF_BIND_IP
 from provider import __file__ as provider_package_file
 from provider.constants import (
-    CONF_TARGET_PLAYER,
     CONF_TARGET_PLAYERS,
     TRANSPORT_STATE_PAUSED,
     TRANSPORT_STATE_PLAYING,
@@ -99,7 +104,7 @@ class _StubConfig:
 
     def __init__(
         self,
-        values: dict[str, str],
+        values: dict[str, str | list[str]],
         instance_id: str = "dlna_receiver_test",
         name: str = "DLNA Receiver",
     ) -> None:
@@ -107,11 +112,11 @@ class _StubConfig:
         self.instance_id = instance_id
         self.name = name
 
-    def get_value(self, key: str) -> str | None:
+    def get_value(self, key: str) -> str | list[str] | None:
         return self._values.get(key)
 
 
-def _make_provider(cls, values: dict[str, str]):  # type: ignore[no-untyped-def]
+def _make_provider(cls, values: dict[str, str | list[str]]):  # type: ignore[no-untyped-def]
     inst = cls.__new__(cls)
     inst.config = _StubConfig(values)
     return inst
@@ -125,27 +130,6 @@ def _mass_stub(**values: object) -> types.SimpleNamespace:
         return asyncio.create_task(coroutine)
 
     return types.SimpleNamespace(create_task=_create_task, **values)
-
-
-def test_raw_target_prefers_new_key(provider_cls) -> None:  # type: ignore[no-untyped-def]
-    """_raw_target uses CONF_TARGET_PLAYERS when set."""
-    inst = _make_provider(provider_cls, {CONF_TARGET_PLAYERS: "p1,p2"})
-    assert inst._raw_target() == "p1,p2"
-
-
-def test_raw_target_falls_back_to_legacy_key(provider_cls) -> None:  # type: ignore[no-untyped-def]
-    """Legacy CONF_TARGET_PLAYER with '*' must surface via _raw_target."""
-    inst = _make_provider(
-        provider_cls,
-        {CONF_TARGET_PLAYERS: "", CONF_TARGET_PLAYER: "*"},
-    )
-    assert inst._raw_target() == "*"
-
-
-def test_raw_target_defaults_to_all_players(provider_cls) -> None:  # type: ignore[no-untyped-def]
-    """No configured targets defaults to all available players."""
-    inst = _make_provider(provider_cls, {})
-    assert inst._raw_target() == "*"
 
 
 def test_manifest_has_provider_icon() -> None:
@@ -354,7 +338,13 @@ def _make_contract_provider(
     never drift from the constructor's state initialization.
     """
     prov = cls(
-        cast("Any", _mass_stub(cache=None)),
+        cast(
+            "Any",
+            _mass_stub(
+                cache=None,
+                players=types.SimpleNamespace(all_players=lambda **_kwargs: []),
+            ),
+        ),
         cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
         cast("Any", _StubConfig({})),
     )
@@ -832,7 +822,53 @@ async def test_instance_config_entries_expose_runtime_options(provider_cls) -> N
         "http_port",
     }
     target_entry = next(entry for entry in entries if entry.key == CONF_TARGET_PLAYERS)
-    assert target_entry.default_value == "*"
+    assert target_entry.multi_value is True
+    assert target_entry.default_value == []
+
+
+async def test_target_player_options_are_sorted_and_keep_missing_selection(
+    provider_cls: type[DLNAReceiverProvider],
+) -> None:
+    """Player options use stable IDs and retain a missing saved target disabled."""
+    own_uuid = deterministic_udn("kitchen").removeprefix("uuid:").upper()
+    players = [
+        types.SimpleNamespace(
+            player_id="bedroom",
+            display_name="Bedroom",
+            name="Bedroom",
+            device_info=types.SimpleNamespace(identifiers={}),
+        ),
+        types.SimpleNamespace(
+            player_id="kitchen",
+            display_name="Kitchen",
+            name="Kitchen",
+            device_info=types.SimpleNamespace(identifiers={}),
+        ),
+        types.SimpleNamespace(
+            player_id="own-renderer",
+            display_name="Music Assistant — Kitchen",
+            name="Music Assistant — Kitchen",
+            device_info=types.SimpleNamespace(identifiers={IdentifierType.UUID: own_uuid}),
+        ),
+    ]
+    mass = _mass_stub(
+        cache=None,
+        players=types.SimpleNamespace(all_players=lambda **_kwargs: players),
+    )
+    prov = provider_cls(
+        cast("Any", mass),
+        cast("Any", types.SimpleNamespace(domain="dlna_receiver")),
+        cast("Any", _StubConfig({CONF_TARGET_PLAYERS: ["kitchen", "missing"]})),
+    )
+
+    entries = await prov.get_config_entries()
+
+    target_entry = next(entry for entry in entries if entry.key == CONF_TARGET_PLAYERS)
+    assert [(option.value, option.title, option.disabled) for option in target_entry.options] == [
+        ("bedroom", "Bedroom", False),
+        ("kitchen", "Kitchen", False),
+        ("missing", "missing", True),
+    ]
 
 
 async def test_on_play_reports_expected_playback_failure(provider_cls) -> None:  # type: ignore[no-untyped-def]
