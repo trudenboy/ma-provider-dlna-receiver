@@ -256,26 +256,27 @@ class DLNAReceiverProvider(PluginProvider):
             self._audio_source_for(source_id, inst) for source_id, inst in self._instances.items()
         ]
 
-    async def get_stream_details(self, source_id: str, queue_id: str) -> StreamDetails:
+    async def get_stream_details(self, item_id: str, media_type: MediaType) -> StreamDetails:
         """
         Return StreamDetails for streaming the received DLNA audio.
 
-        :param source_id: The AudioSource.item_id requested for playback.
-        :param queue_id: The queue that owns this playback session.
-        :raises MediaNotFoundError: If the source id matches no renderer.
+        :param item_id: The AudioSource.item_id requested for playback.
+        :param media_type: The requested media type, which must be AUDIO_SOURCE.
+        :raises MediaNotFoundError: If the media type or source id is unsupported.
         :raises AudioError: If no DLNA sender has pushed a stream URL yet.
         """
-        del queue_id  # ownership is claimed in on_source_selected
-        inst = self._instances.get(source_id)
+        if media_type is not MediaType.AUDIO_SOURCE:
+            raise MediaNotFoundError(f"Unsupported media type: {media_type}")
+        inst = self._instances.get(item_id)
         if inst is None:
-            raise MediaNotFoundError(f"Unknown AudioSource: {source_id}")
+            raise MediaNotFoundError(f"Unknown AudioSource: {item_id}")
         if not inst.current_stream_url:
             raise AudioError(
                 "DLNA renderer has no active stream — start casting from the sender app first"
             )
         return StreamDetails(
             provider=self.instance_id,
-            item_id=source_id,
+            item_id=item_id,
             audio_format=self._probe_audio_format(),
             media_type=MediaType.AUDIO_SOURCE,
             stream_type=StreamType.CUSTOM,

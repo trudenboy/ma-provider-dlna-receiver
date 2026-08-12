@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import pytest
 from music_assistant_models.enums import ContentType, MediaType, QueueOption, StreamType
-from music_assistant_models.errors import MusicAssistantError, SetupFailedError
+from music_assistant_models.errors import MediaNotFoundError, MusicAssistantError, SetupFailedError
 from music_assistant_models.streamdetails import StreamMetadata
 
 from music_assistant.constants import CONF_BIND_IP
@@ -231,7 +231,9 @@ async def test_loaded_publishes_registry_instances_while_start_is_in_progress(
 
     try:
         sources = await prov.get_audio_sources()
-        streamdetails = await prov.get_stream_details("player_kitchen", "queue1")
+        streamdetails = await prov.get_stream_details(
+            item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE
+        )
         assert [source.item_id for source in sources] == ["player_kitchen"]
         assert streamdetails.item_id == "player_kitchen"
     finally:
@@ -374,7 +376,9 @@ def test_get_stream_details_returns_custom_stream(provider_cls) -> None:  # type
         },
     )
 
-    sd = asyncio.run(prov.get_stream_details("player_kitchen", "queue1"))
+    sd = asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
 
     assert sd.provider == prov.instance_id
     assert sd.item_id == "player_kitchen"
@@ -385,6 +389,47 @@ def test_get_stream_details_returns_custom_stream(provider_cls) -> None:  # type
     assert sd.decoded_audio_format is None
 
 
+def test_get_stream_details_accepts_plugin_contract_keywords(provider_cls) -> None:  # type: ignore[no-untyped-def]
+    """The plugin stream-details override accepts the base contract keywords."""
+    prov = _make_contract_provider(
+        provider_cls,
+        {
+            "player_kitchen": _make_instance(
+                "player_kitchen", "Kitchen", "http://cp.local/track.flac"
+            )
+        },
+    )
+
+    details = asyncio.run(
+        prov.get_stream_details(
+            item_id="player_kitchen",
+            media_type=MediaType.AUDIO_SOURCE,
+        )
+    )
+
+    assert details.item_id == "player_kitchen"
+
+
+def test_get_stream_details_rejects_non_audio_source_media_type(provider_cls) -> None:  # type: ignore[no-untyped-def]
+    """Only AudioSource requests can resolve a DLNA receiver stream."""
+    prov = _make_contract_provider(
+        provider_cls,
+        {
+            "player_kitchen": _make_instance(
+                "player_kitchen", "Kitchen", "http://cp.local/track.flac"
+            )
+        },
+    )
+
+    with pytest.raises(MediaNotFoundError):
+        asyncio.run(
+            prov.get_stream_details(
+                item_id="player_kitchen",
+                media_type=MediaType.TRACK,
+            )
+        )
+
+
 def test_get_stream_details_unknown_source_raises(provider_cls) -> None:  # type: ignore[no-untyped-def]
     """Requesting an unknown source id raises MediaNotFoundError."""
     from music_assistant_models.errors import MediaNotFoundError  # noqa: PLC0415
@@ -392,7 +437,7 @@ def test_get_stream_details_unknown_source_raises(provider_cls) -> None:  # type
     prov = _make_contract_provider(provider_cls, {})
 
     with pytest.raises(MediaNotFoundError):
-        asyncio.run(prov.get_stream_details("nope", "queue1"))
+        asyncio.run(prov.get_stream_details(item_id="nope", media_type=MediaType.AUDIO_SOURCE))
 
 
 def test_get_stream_details_without_active_stream_raises(provider_cls) -> None:  # type: ignore[no-untyped-def]
@@ -405,7 +450,9 @@ def test_get_stream_details_without_active_stream_raises(provider_cls) -> None: 
     )
 
     with pytest.raises(AudioError):
-        asyncio.run(prov.get_stream_details("player_kitchen", "queue1"))
+        asyncio.run(
+            prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+        )
 
 
 def test_get_stream_details_is_side_effect_free(provider_cls) -> None:  # type: ignore[no-untyped-def]
@@ -419,7 +466,9 @@ def test_get_stream_details_is_side_effect_free(provider_cls) -> None:  # type: 
         },
     )
 
-    asyncio.run(prov.get_stream_details("player_kitchen", "queue1"))
+    asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
 
     assert prov._claims == {}
 
@@ -644,7 +693,9 @@ def test_get_audio_stream_raises_without_url(provider_cls) -> None:  # type: ign
     inst = _make_instance("player_kitchen", "Kitchen", "http://cp.local/a.flac")
     prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
 
-    sd = asyncio.run(prov.get_stream_details("player_kitchen", "queue1"))
+    sd = asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
     inst.current_stream_url = None
 
     async def _consume() -> None:

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from provider.metadata import parse_didl_metadata
 from provider.renderer import UPnPRenderer
 
 if TYPE_CHECKING:
@@ -187,6 +188,41 @@ async def test_play_pause_stop(
     )
     assert resp.status == 200
     assert renderer.transport_state == "STOPPED"
+
+
+async def test_set_av_transport_uri_preserves_escaped_didl_metadata(
+    client: TestClient[Request, Application], renderer: UPnPRenderer
+) -> None:
+    """SOAP decoding leaves DIDL entities for the DIDL parser to decode once."""
+    received: list[dict[str, str | None]] = []
+
+    async def _capture(_uri: str, metadata: str | None) -> None:
+        received.append(parse_didl_metadata(metadata))
+
+    renderer.on_set_av_transport_uri = _capture
+    body = """\
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Body>
+    <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+      <InstanceID>0</InstanceID>
+      <CurrentURI>http://example.com/stream.flac</CurrentURI>
+      <CurrentURIMetaData>&lt;DIDL-Lite xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot; xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot;&gt;&lt;item&gt;&lt;dc:title&gt;Simon &amp;amp; Garfunkel&lt;/dc:title&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;</CurrentURIMetaData>
+    </u:SetAVTransportURI>
+  </s:Body>
+</s:Envelope>
+"""
+
+    resp = await client.post(
+        "/AVTransport/control",
+        headers={
+            "SOAPACTION": '"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"',
+        },
+        data=body,
+    )
+
+    assert resp.status == 200
+    assert received[0]["title"] == "Simon & Garfunkel"
+    assert "Simon &amp; Garfunkel" in renderer.current_uri_metadata
 
 
 async def test_play_callback_receives_prior_transport_state(
