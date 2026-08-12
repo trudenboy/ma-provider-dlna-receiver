@@ -93,6 +93,7 @@ def redact_url(uri: str) -> str:
     """
     try:
         parts = urlsplit(uri)
+        port = parts.port
     except ValueError:
         return "<invalid-url>"
     host = parts.hostname or ""
@@ -101,8 +102,8 @@ def redact_url(uri: str) -> str:
     if ":" in host:
         host = f"[{host}]"
     netloc = host
-    if parts.port:
-        netloc = f"{netloc}:{parts.port}"
+    if port:
+        netloc = f"{netloc}:{port}"
     if parts.username or parts.password:
         netloc = f"***@{netloc}"
     # Drop query + fragment (positions 3 and 4) regardless of whether

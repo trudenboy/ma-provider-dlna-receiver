@@ -186,6 +186,13 @@ def test_redact_url_invalid_returns_placeholder() -> None:
     assert redacted == "<invalid-url>"
 
 
+def test_redact_url_invalid_port_returns_placeholder_without_leaking_secrets() -> None:
+    """An invalid port cannot break or expose data from an error-reporting path."""
+    redacted = redact_url("http://alice:secret@example.com:99999/path?token=signed")
+
+    assert redacted == "<invalid-url>"
+
+
 def test_redact_url_preserves_ipv6_brackets() -> None:
     """IPv6 hosts keep their brackets when userinfo is stripped."""
     redacted = redact_url("http://user:pass@[::1]:8080/x")
