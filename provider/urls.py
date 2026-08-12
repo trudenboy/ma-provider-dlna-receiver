@@ -52,7 +52,7 @@ async def validate_outbound_url(uri: str) -> str | None:
                 None,
                 type=socket.SOCK_STREAM,
             )
-        except OSError:
+        except OSError, UnicodeError:
             return None
         if not answers:
             return None

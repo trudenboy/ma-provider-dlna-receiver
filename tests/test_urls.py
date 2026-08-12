@@ -142,6 +142,20 @@ async def test_validate_outbound_url_rejects_dns_error(monkeypatch: pytest.Monke
     assert await validate_outbound_url("http://missing.local/audio.flac") is None
 
 
+async def test_validate_outbound_url_rejects_invalid_idna_hostname(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolver IDNA encoding errors are handled as invalid destinations."""
+    loop = asyncio.get_running_loop()
+
+    async def _resolve(*_args: object, **_kwargs: object) -> list[tuple[object, ...]]:
+        raise UnicodeEncodeError("idna", "\ud800", 0, 1, "invalid hostname")
+
+    monkeypatch.setattr(loop, "getaddrinfo", _resolve)
+
+    assert await validate_outbound_url("http://invalid.example/audio.flac") is None
+
+
 def test_redact_url_strips_query_without_userinfo() -> None:
     """
     Query params are dropped even when there is no userinfo to mask.
