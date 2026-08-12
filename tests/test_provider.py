@@ -11,9 +11,9 @@ import asyncio
 import json
 import types
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Self, cast
 
 import pytest
 from music_assistant_models.enums import (
@@ -23,7 +23,12 @@ from music_assistant_models.enums import (
     QueueOption,
     StreamType,
 )
-from music_assistant_models.errors import MediaNotFoundError, MusicAssistantError, SetupFailedError
+from music_assistant_models.errors import (
+    AudioError,
+    MediaNotFoundError,
+    MusicAssistantError,
+    SetupFailedError,
+)
 from music_assistant_models.streamdetails import StreamMetadata
 
 from music_assistant.constants import CONF_BIND_IP
@@ -730,6 +735,162 @@ def test_get_audio_stream_raises_without_url(provider_cls) -> None:  # type: ign
 
     with pytest.raises(AudioError):
         asyncio.run(_consume())
+
+
+class _StreamResponse:
+    """Async context manager carrying one fake upstream HTTP response."""
+
+    def __init__(
+        self,
+        status: int,
+        *,
+        location: str | None = None,
+        chunks: tuple[bytes, ...] = (),
+    ) -> None:
+        self.status = status
+        self.headers = {"Location": location} if location is not None else {}
+        self.content = self
+        self._chunks = chunks
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+    async def iter_any(self) -> AsyncGenerator[bytes]:
+        """Yield configured response chunks."""
+        for chunk in self._chunks:
+            yield chunk
+
+
+class _StreamSession:
+    """Shared-session double recording manual redirect requests."""
+
+    def __init__(self, responses: list[_StreamResponse]) -> None:
+        self._responses = responses
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def get(self, url: str, **kwargs: object) -> _StreamResponse:
+        """Return the next configured response and record request options."""
+        self.calls.append((url, kwargs))
+        return self._responses.pop(0)
+
+
+def test_get_audio_stream_validates_each_manual_redirect(
+    provider_cls: type[DLNAReceiverProvider], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The original destination and every redirect are checked before GET."""
+    import provider.provider as provider_module  # noqa: PLC0415
+
+    checked: list[str] = []
+
+    async def _allow(url: str) -> str:
+        checked.append(url)
+        return url
+
+    monkeypatch.setattr(provider_module, "_validate_outbound_url", _allow)
+    session = _StreamSession(
+        [
+            _StreamResponse(302, location="/next.flac"),
+            _StreamResponse(200, chunks=(b"audio",)),
+        ]
+    )
+    start_url = "http://192.168.1.20/start.flac"
+    inst = _make_instance("player_kitchen", "Kitchen", start_url)
+    prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
+    prov.mass = cast("Any", _mass_stub(http_session=session))
+    details = asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
+
+    async def _consume() -> list[bytes]:
+        return [chunk async for chunk in prov.get_audio_stream(details)]
+
+    assert asyncio.run(_consume()) == [b"audio"]
+    assert checked == [start_url, "http://192.168.1.20/next.flac"]
+    assert [call[0] for call in session.calls] == checked
+    assert all(call[1]["allow_redirects"] is False for call in session.calls)
+
+
+def test_get_audio_stream_rejects_sixth_redirect(
+    provider_cls: type[DLNAReceiverProvider], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At most five redirect transitions are followed."""
+    import provider.provider as provider_module  # noqa: PLC0415
+
+    async def _allow(url: str) -> str:
+        return url
+
+    monkeypatch.setattr(provider_module, "_validate_outbound_url", _allow)
+    session = _StreamSession([_StreamResponse(302, location=f"/hop-{idx}") for idx in range(1, 7)])
+    inst = _make_instance("player_kitchen", "Kitchen", "http://192.168.1.20/start")
+    prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
+    prov.mass = cast("Any", _mass_stub(http_session=session))
+    details = asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
+
+    async def _consume() -> None:
+        async for _chunk in prov.get_audio_stream(details):
+            pass
+
+    with pytest.raises(AudioError, match="redirect"):
+        asyncio.run(_consume())
+    assert len(session.calls) == 6
+
+
+def test_get_audio_stream_rejects_unsafe_redirect_without_leaking_query(
+    provider_cls: type[DLNAReceiverProvider], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A denied redirect is not requested and its credentials stay redacted."""
+    import provider.provider as provider_module  # noqa: PLC0415
+
+    async def _policy(url: str) -> str | None:
+        return None if "127.0.0.1" in url else url
+
+    monkeypatch.setattr(provider_module, "_validate_outbound_url", _policy)
+    session = _StreamSession(
+        [_StreamResponse(302, location="http://127.0.0.1/private?token=secret")]
+    )
+    inst = _make_instance("player_kitchen", "Kitchen", "http://192.168.1.20/start")
+    prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
+    prov.mass = cast("Any", _mass_stub(http_session=session))
+    details = asyncio.run(
+        prov.get_stream_details(item_id="player_kitchen", media_type=MediaType.AUDIO_SOURCE)
+    )
+
+    async def _consume() -> None:
+        async for _chunk in prov.get_audio_stream(details):
+            pass
+
+    with pytest.raises(AudioError) as exc_info:
+        asyncio.run(_consume())
+    assert "secret" not in str(exc_info.value)
+    assert len(session.calls) == 1
+
+
+def test_set_transport_uri_rejects_loopback_before_state_change(
+    provider_cls: type[DLNAReceiverProvider],
+) -> None:
+    """SetAVTransportURI rejects loopback while retaining an existing stream."""
+    inst = _make_instance("player_kitchen", "Kitchen", "http://192.168.1.20/prior")
+    prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
+
+    with pytest.raises(ValueError, match="disallowed"):
+        asyncio.run(prov._on_set_transport_uri(inst, "http://127.0.0.1/private", None))
+
+    assert inst.current_stream_url == "http://192.168.1.20/prior"
+
+
+def test_set_transport_uri_allows_lan_destination(provider_cls: type[DLNAReceiverProvider]) -> None:
+    """LAN and NAS stream URLs remain accepted by SetAVTransportURI."""
+    inst = _make_instance("player_kitchen", "Kitchen")
+    prov = _make_contract_provider(provider_cls, {"player_kitchen": inst})
+
+    asyncio.run(prov._on_set_transport_uri(inst, "http://192.168.1.20/audio.flac", None))
+
+    assert inst.current_stream_url == "http://192.168.1.20/audio.flac"
 
 
 def test_on_source_selected_stops_previous_queue_on_handoff(provider_cls) -> None:  # type: ignore[no-untyped-def]

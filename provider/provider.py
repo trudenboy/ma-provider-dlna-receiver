@@ -18,6 +18,7 @@ import logging
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, ClassVar
+from urllib.parse import urljoin
 
 import aiohttp
 from music_assistant_models.config_entries import ConfigEntry, ConfigValueOption
@@ -70,7 +71,7 @@ from .metadata import (
 )
 from .models import RendererInstance
 from .urls import redact_url as _redact_url
-from .urls import validate_stream_url as _validate_stream_url
+from .urls import validate_outbound_url as _validate_outbound_url
 
 if TYPE_CHECKING:
     from music_assistant_models.config_entries import ProviderConfig
@@ -314,27 +315,44 @@ class DLNAReceiverProvider(PluginProvider):
         timeout = aiohttp.ClientTimeout(total=None, sock_connect=10, sock_read=30)
         bytes_streamed = False
         # Reuse MA's shared HTTP session (matches streams/audio.py) so we
-        # don't open a fresh TCP connector + DNS cache per activation.
+        # don't open a fresh TCP connector + DNS cache per activation. The
+        # policy lookup and the shared connector's lookup are not pinned to
+        # one DNS answer, so a residual DNS-rebinding TOCTOU window remains.
         try:
-            async with self.mass.http_session.get(stream_url, timeout=timeout) as resp:
-                # Re-validate after any redirects: the final URL still has to
-                # be an http(s) endpoint, otherwise refuse to stream. (aiohttp
-                # won't follow non-http schemes, but belt-and-suspenders.)
-                final_url = str(resp.url)
-                if _validate_stream_url(final_url) is None:
+            current_url = stream_url
+            for redirect_count in range(6):
+                safe_url = await _validate_outbound_url(current_url)
+                if safe_url is None:
                     raise AudioError(
-                        f"Upstream DLNA source redirected to disallowed URL: "
-                        f"{_redact_url(final_url)}"
+                        f"Outbound DLNA source destination is not allowed: "
+                        f"{_redact_url(current_url)}"
                     )
-                # Accept any 2xx (e.g. 206 Partial Content is common for audio).
-                if not 200 <= resp.status < 300:
-                    raise AudioError(
-                        f"Upstream DLNA source returned HTTP {resp.status} for "
-                        f"{_redact_url(stream_url)}"
-                    )
-                async for chunk in resp.content.iter_any():
-                    bytes_streamed = True
-                    yield chunk
+                async with self.mass.http_session.get(
+                    safe_url,
+                    timeout=timeout,
+                    allow_redirects=False,
+                ) as resp:
+                    if 300 <= resp.status < 400:
+                        if redirect_count >= 5:
+                            raise AudioError("Upstream DLNA source exceeded five redirects")
+                        location = resp.headers.get("Location")
+                        if not location:
+                            raise AudioError("Upstream DLNA source redirect has no Location")
+                        try:
+                            current_url = urljoin(safe_url, location)
+                        except ValueError as err:
+                            raise AudioError("Upstream DLNA source redirect is invalid") from err
+                        continue
+                    # Accept any 2xx (e.g. 206 Partial Content is common for audio).
+                    if not 200 <= resp.status < 300:
+                        raise AudioError(
+                            f"Upstream DLNA source returned HTTP {resp.status} for "
+                            f"{_redact_url(safe_url)}"
+                        )
+                    async for chunk in resp.content.iter_any():
+                        bytes_streamed = True
+                        yield chunk
+                    break
         except (aiohttp.ClientError, TimeoutError) as err:
             # A drop mid-stream just ends the stream (the sender went away);
             # a failure before the first byte is a real error to surface.
@@ -505,14 +523,14 @@ class DLNAReceiverProvider(PluginProvider):
             control point sees the rejection instead of a silent
             200 OK.
         """
-        safe_url = _validate_stream_url(uri)
+        safe_url = await _validate_outbound_url(uri)
         if safe_url is None:
             LOGGER.warning(
-                "Rejecting transport URI for '%s' (unsupported scheme/host): %s",
+                "Rejecting transport URI for '%s' (destination not allowed): %s",
                 inst.player_name or "(default)",
                 _redact_url(uri),
             )
-            raise ValueError("unsupported URI scheme or missing host")
+            raise ValueError("unsupported or disallowed stream destination")
         LOGGER.info(
             "Received transport URI for '%s': %s",
             inst.player_name or "(default)",
