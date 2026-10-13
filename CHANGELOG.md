@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.8] - 2026-10-13
+
+### Fixed
+
+- Live DLNA track metadata and playback progress now reach the owning Music Assistant player on current server versions.
+- Taking over a DLNA source now stops the previous owning player, including when the audio was served through a protocol bridge.
+- Sender Pause and resume now control a pause-capable output player; unsupported Pause returns a SOAP error without changing transport state.
+- Provider tests now run against the installed Music Assistant package without exporting standalone test setup to upstream.
+
 ## [1.2.7] - 2026-08-12
 
 ### Changed
