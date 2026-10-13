@@ -21,6 +21,7 @@ from music_assistant_models.enums import (
     ContentType,
     IdentifierType,
     MediaType,
+    PlayerFeature,
     QueueOption,
     StreamType,
 )
@@ -686,8 +687,8 @@ def test_on_play_resumes_paused_player_without_restarting_stream(provider_cls) -
     play_commands: list[str] = []
     play_media_calls: list[tuple[object, ...]] = []
 
-    async def _record_cmd_play(player_id: str) -> None:
-        play_commands.append(player_id)
+    async def _record_output_play() -> None:
+        play_commands.append("output_player")
 
     async def _record_play_media(*args: object, **_kwargs: object) -> None:
         play_media_calls.append(args)
@@ -695,20 +696,82 @@ def test_on_play_resumes_paused_player_without_restarting_stream(provider_cls) -
     prov.mass = cast(
         "Any",
         _mass_stub(
-            players=types.SimpleNamespace(cmd_play=_record_cmd_play),
+            players=types.SimpleNamespace(
+                get_player=lambda _player_id: types.SimpleNamespace(
+                    resolve_output_player=lambda: types.SimpleNamespace(
+                        supported_features={PlayerFeature.PAUSE}, play=_record_output_play
+                    )
+                )
+            ),
             player_queues=types.SimpleNamespace(play_media=_record_play_media),
         ),
     )
 
     asyncio.run(prov._on_play(inst, TRANSPORT_STATE_PAUSED))
 
-    assert play_commands == ["player_kitchen"]
+    assert play_commands == ["output_player"]
     assert play_media_calls == []
     assert inst.current_stream_url == "http://cp.local/track.flac"
     assert inst.stream_metadata is metadata
     assert inst.elapsed_offset == 37
     assert inst.play_start_time is not None
     assert inst.metadata_dirty is True
+
+
+@pytest.mark.asyncio
+async def test_sender_pause_controls_supported_output_player() -> None:
+    """Sender Pause controls the output without restarting the source queue."""
+    inst = _make_instance("player_kitchen", "Kitchen", "http://cp.local/track.flac")
+    inst.play_start_time = 100.0
+    prov = _make_contract_provider(DLNAReceiverProvider, {"player_kitchen": inst})
+    commands: list[str] = []
+
+    async def _pause() -> None:
+        commands.append("pause")
+
+    async def _play() -> None:
+        commands.append("play")
+
+    output = types.SimpleNamespace(
+        supported_features={PlayerFeature.PAUSE}, pause=_pause, play=_play
+    )
+    prov.mass = cast(
+        "Any",
+        _mass_stub(
+            players=types.SimpleNamespace(
+                get_player=lambda _player_id: types.SimpleNamespace(
+                    resolve_output_player=lambda: output
+                )
+            )
+        ),
+    )
+
+    assert await prov._on_pause(inst) is True
+    assert await prov._on_play(inst, TRANSPORT_STATE_PAUSED) is True
+    assert commands == ["pause", "play"]
+    assert inst.current_stream_url == "http://cp.local/track.flac"
+
+
+@pytest.mark.asyncio
+async def test_sender_pause_rejects_output_without_pause() -> None:
+    """Unsupported Pause leaves transport progress unchanged."""
+    inst = _make_instance("player_kitchen", "Kitchen", "http://cp.local/track.flac")
+    inst.play_start_time = 100.0
+    prov = _make_contract_provider(DLNAReceiverProvider, {"player_kitchen": inst})
+    output = types.SimpleNamespace(supported_features=set())
+    prov.mass = cast(
+        "Any",
+        _mass_stub(
+            players=types.SimpleNamespace(
+                get_player=lambda _player_id: types.SimpleNamespace(
+                    resolve_output_player=lambda: output
+                )
+            )
+        ),
+    )
+
+    assert await prov._on_pause(inst) is False
+    assert inst.play_start_time == 100.0
 
 
 def test_on_play_is_idempotent_while_already_playing(provider_cls) -> None:  # type: ignore[no-untyped-def]

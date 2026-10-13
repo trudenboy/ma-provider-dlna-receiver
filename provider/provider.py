@@ -27,6 +27,7 @@ from music_assistant_models.enums import (
     ContentType,
     IdentifierType,
     MediaType,
+    PlayerFeature,
     ProviderFeature,
     QueueOption,
     StreamType,
@@ -556,8 +557,14 @@ class DLNAReceiverProvider(PluginProvider):
 
         if previous_state == TRANSPORT_STATE_PAUSED:
             LOGGER.info("Resuming playback on player %s", target)
+            player = self.mass.players.get_player(target)
+            if player is None:
+                return False
+            output = player.resolve_output_player()
+            if PlayerFeature.PAUSE not in output.supported_features:
+                return False
             try:
-                await self.mass.players.cmd_play(target)
+                await output.play()
             except MusicAssistantError as err:
                 LOGGER.warning("Could not resume playback on %s: %s", target, err)
                 return False
@@ -606,12 +613,24 @@ class DLNAReceiverProvider(PluginProvider):
         self._ensure_metadata_task()
         return True
 
-    async def _on_pause(self, inst: RendererInstance) -> None:
+    async def _on_pause(self, inst: RendererInstance) -> bool:
         """Handle Pause for this instance's player."""
-        if inst.player_id:
-            freeze_elapsed(inst)
-            inst.metadata_dirty = True
-            await self.mass.players.cmd_pause(inst.player_id)
+        if not inst.player_id:
+            return False
+        player = self.mass.players.get_player(inst.player_id)
+        if player is None:
+            return False
+        output = player.resolve_output_player()
+        if PlayerFeature.PAUSE not in output.supported_features:
+            return False
+        try:
+            await output.pause()
+        except MusicAssistantError as err:
+            LOGGER.warning("Could not pause playback on %s: %s", inst.player_id, err)
+            return False
+        freeze_elapsed(inst)
+        inst.metadata_dirty = True
+        return True
 
     async def _on_stop(self, inst: RendererInstance) -> None:
         """Handle Stop for this instance's player."""
