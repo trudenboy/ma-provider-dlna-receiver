@@ -126,7 +126,7 @@ class DLNAReceiverProvider(PluginProvider):
         super().__init__(mass, manifest, config, self.SUPPORTED_FEATURES)
         self._instances: dict[str, RendererInstance] = {}
         self._registry: RendererRegistry | None = None
-        # Exclusive stream claims: source_id -> (queue_id, stream_session_id).
+        # Exclusive stream claims: source_id -> (owner_player_id, stream_session_id).
         # Claimed in on_source_selected (never in get_stream_details, which
         # must stay side-effect-free for queue preload), released in
         # on_source_unselected when the session token matches.
@@ -370,7 +370,7 @@ class DLNAReceiverProvider(PluginProvider):
         self,
         source_id: str,
         player_id: str,
-        queue_id: str,
+        owner_player_id: str,
         stream_session_id: str,
     ) -> None:
         """
@@ -378,7 +378,7 @@ class DLNAReceiverProvider(PluginProvider):
 
         :param source_id: The AudioSource.item_id that was selected.
         :param player_id: The player that will receive the stream.
-        :param queue_id: The queue that owns this playback session.
+        :param owner_player_id: The player that owns this playback session.
         :param stream_session_id: Controller token paired with the matching
             on_source_unselected call.
         """
@@ -389,30 +389,30 @@ class DLNAReceiverProvider(PluginProvider):
         # consumer before replacing its claim (its late on_source_unselected
         # is rejected by the session-id guard).
         previous = self._claims.get(source_id)
-        if previous and previous[0] != queue_id:
+        if previous and previous[0] != owner_player_id:
             try:
                 await self.mass.players.cmd_stop(previous[0])
             except MusicAssistantError as err:
                 LOGGER.debug("Could not stop previous consumer %s: %s", previous[0], err)
-        self._claims[source_id] = (queue_id, stream_session_id)
+        self._claims[source_id] = (owner_player_id, stream_session_id)
         self._ensure_metadata_task()
 
     async def on_source_unselected(
         self,
         source_id: str,
-        queue_id: str,
+        owner_player_id: str,
         stream_session_id: str,
     ) -> None:
         """
         Release the stream claim when MA tears down the queue's stream.
 
         :param source_id: The AudioSource.item_id whose stream ended.
-        :param queue_id: The queue whose stream is being torn down.
+        :param owner_player_id: The player whose stream is being torn down.
         :param stream_session_id: Token paired with on_source_selected; stale
             tokens from a superseded request are ignored.
         """
         claim = self._claims.get(source_id)
-        if claim != (queue_id, stream_session_id):
+        if claim != (owner_player_id, stream_session_id):
             return
         del self._claims[source_id]
         # MA stopped consuming: stop elapsed tracking so the metadata loop
@@ -572,7 +572,7 @@ class DLNAReceiverProvider(PluginProvider):
         duration = parse_duration(meta.get("duration"))
 
         # Stream metadata for MA UI display; travels with the StreamDetails
-        # and is refreshed via update_stream_metadata by the metadata loop.
+        # and is refreshed via update_source_metadata by the metadata loop.
         inst.stream_metadata = StreamMetadata(
             title=meta.get("title") or "DLNA Stream",
             artist=meta.get("artist"),
@@ -656,7 +656,7 @@ class DLNAReceiverProvider(PluginProvider):
 
     async def _metadata_update_loop(self) -> None:
         """
-        Periodically update elapsed time and push it to the claiming queues.
+        Periodically update elapsed time and push it to the owning players.
 
         Exits on its own when no renderer instance has active stream metadata
         left; restarted on demand by _ensure_metadata_task.
@@ -686,7 +686,7 @@ class DLNAReceiverProvider(PluginProvider):
 
                 claim = self._claims.get(source_id)
                 if claim and self._should_push_metadata(inst, now):
-                    self.mass.streams.update_stream_metadata(
+                    self.mass.players.update_source_metadata(
                         claim[0],
                         source_id,
                         self.instance_id,
