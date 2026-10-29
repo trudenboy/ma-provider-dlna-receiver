@@ -47,10 +47,10 @@ and more.
 
 ## Multi-player mode
 
-By default, the **Target players** selection is empty, which dynamically exposes
-**every eligible MA player** as a separate DLNA renderer on your network. Use
-the multi-select setting to expose only specific players. Control points see
-them individually:
+By default, the **Connected players** selection is empty, which dynamically
+exposes **every eligible MA player** as a separate DLNA renderer on your
+network. Use the multi-select setting to expose only specific players. Control
+points see them individually:
 
 - *Music Assistant — Kitchen*
 - *Music Assistant — Living Room*
@@ -79,9 +79,12 @@ source .venv/bin/activate
 | Key | Description | Default |
 |-----|-------------|---------|
 | `friendly_name` | Prefix for DLNA renderer names | `Music Assistant` |
-| `target_players` | Player multi-select; empty exposes all eligible players | *(empty)* |
+| `connected_players` | Player multi-select; empty exposes all eligible players | *(empty)* |
 | `bind_ip` | IP for UPnP HTTP server & SSDP | *(auto-detect)* |
 | `http_port` | Base port for UPnP HTTP servers | `8298` |
+
+> Upgrading from 1.2.x: the old `target_players` selection is not migrated.
+> Re-select the players under **Connected players** once.
 
 > In multi-player mode ports auto-increment: 8298, 8299, 8300, …
 
