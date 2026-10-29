@@ -30,7 +30,6 @@ SetTransportUriCallback = Callable[[RendererInstance, str, str | None], Awaitabl
 PlayCallback = Callable[[RendererInstance, str], Awaitable[bool]]
 PauseCallback = Callable[[RendererInstance], Awaitable[bool]]
 StopCallback = Callable[[RendererInstance], Awaitable[bool]]
-InstanceCallback = Callable[[RendererInstance], Awaitable[None]]
 PositionCallback = Callable[[RendererInstance], tuple[int, int]]
 VolumeGetterCallback = Callable[[RendererInstance], Awaitable[int | None]]
 MuteGetterCallback = Callable[[RendererInstance], Awaitable[bool | None]]
