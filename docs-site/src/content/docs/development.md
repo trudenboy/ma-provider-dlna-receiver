@@ -8,7 +8,7 @@ description: Setting up the development environment for DLNA Receiver provider
 
 - Python 3.14+
 - [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- ffmpeg 6.1+ (for MA integration tests)
+- ffmpeg 7.0+ (for MA integration tests)
   - macOS: `brew install ffmpeg`
   - Ubuntu: `sudo apt-get install ffmpeg`
 - Fork of [trudenboy/ma-server](https://github.com/trudenboy/ma-server) (for dev server)
@@ -60,9 +60,12 @@ gh pr create --base dev
 ## Dev Server
 
 ```bash
-./scripts/dev-server.sh
+docker compose -f docker-compose.dev.yml up
 # UI: http://localhost:8095
 ```
+
+The container mounts `provider/` and uses `network_mode: host`, which SSDP
+requires. See [Docker](dev-docker.md) for commands and reset instructions.
 
 ## Conventional Commits
 
