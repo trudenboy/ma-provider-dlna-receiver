@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+from typing import Any, cast
 
 import pytest
 from music_assistant_models.errors import SetupFailedError
@@ -152,11 +153,13 @@ def _advertiser() -> SSDPAdvertiser:
     )
 
 
-async def test_send_alive_announces_device_and_services() -> None:
+async def test_send_alive_announces_device_and_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Alive notifications cover root, UDN, device and every service type."""
     advertiser = _advertiser()
     sent: list[str] = []
-    advertiser._send_datagram = sent.append  # type: ignore[assignment]
+    monkeypatch.setattr(advertiser, "_send_datagram", sent.append)
 
     await advertiser._send_alive()
 
@@ -176,11 +179,13 @@ async def test_send_alive_announces_device_and_services() -> None:
         assert f"NT: {notification_type}" in joined
 
 
-async def test_send_byebye_announces_device_and_root() -> None:
+async def test_send_byebye_announces_device_and_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Byebye notifications cover root, UDN and the device type."""
     advertiser = _advertiser()
     sent: list[str] = []
-    advertiser._send_datagram = sent.append  # type: ignore[assignment]
+    monkeypatch.setattr(advertiser, "_send_datagram", sent.append)
 
     await advertiser._send_byebye()
 
@@ -204,11 +209,11 @@ def test_send_datagram_requires_an_open_transport() -> None:
         def sendto(self, data: bytes, _addr: object) -> None:
             calls.append(data)
 
-    advertiser._transport = _Transport(True)  # type: ignore[assignment]
+    advertiser._transport = cast("Any", _Transport(True))
     advertiser._send_datagram("NOTIFY")
     assert calls == []
 
-    advertiser._transport = _Transport(False)  # type: ignore[assignment]
+    advertiser._transport = cast("Any", _Transport(False))
     advertiser._send_datagram("NOTIFY")
     assert calls == [b"NOTIFY"]
 
@@ -228,11 +233,11 @@ def test_send_response_requires_an_open_receive_transport() -> None:
         def sendto(self, data: bytes, addr: object) -> None:
             calls.append((data, addr))
 
-    advertiser._recv_transport = _Transport(True)  # type: ignore[assignment]
+    advertiser._recv_transport = cast("Any", _Transport(True))
     advertiser._send_response(b"response", ("192.168.1.5", 1900), "ssdp:all")
     assert calls == []
 
-    advertiser._recv_transport = _Transport(False)  # type: ignore[assignment]
+    advertiser._recv_transport = cast("Any", _Transport(False))
     advertiser._send_response(b"response", ("192.168.1.5", 1900), "ssdp:all")
     assert calls == [(b"response", ("192.168.1.5", 1900))]
 
@@ -258,12 +263,16 @@ async def test_delayed_response_cancellation_sends_nothing(
     assert responses == []
 
 
-def test_receive_protocol_routes_datagrams_to_the_advertiser() -> None:
+def test_receive_protocol_routes_datagrams_to_the_advertiser(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The UDP receive protocol forwards incoming bytes to handle_search."""
     advertiser = _advertiser()
     received: list[tuple[bytes, tuple[str, int]]] = []
-    advertiser.handle_search = (  # type: ignore[assignment]
-        lambda data, addr: received.append((data, addr))
+    monkeypatch.setattr(
+        advertiser,
+        "handle_search",
+        lambda data, addr: received.append((data, addr)),
     )
 
     protocol = _SSDPRecvProtocol(advertiser)
