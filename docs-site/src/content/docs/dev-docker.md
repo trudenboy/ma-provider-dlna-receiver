@@ -31,9 +31,9 @@ On first launch, Music Assistant runs an onboarding wizard:
 
 After login:
 
-1. Go to **Settings** → **Plugins**
+1. Go to **Settings** → **Providers**
 2. Find **DLNA Receiver** in the list — it's already available, the code is pre-loaded
-3. Click **Add**, select **Connected players**, and leave **Bind IP** empty unless auto-detection picks the wrong interface
+3. Click **Add** and enter your credentials
 4. Provider configuration is saved to `.ma-data/` and persists across restarts
 
 > 💡 If the provider doesn't appear, check the logs:
@@ -62,5 +62,5 @@ docker compose -f docker-compose.dev.yml restart
 
 ## Persistent State
 
-All MA configuration and cache are stored in `.ma-data/` (add to `.gitignore`).
+All MA configuration, credentials, and cache are stored in `.ma-data/` (add to `.gitignore`).
 This directory is created automatically on first run.
