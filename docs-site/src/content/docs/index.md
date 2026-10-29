@@ -21,7 +21,9 @@ description: Documentation for the DLNA Receiver provider for Music Assistant
 
 
 
-Music Assistant supports [DLNA Receiver](https://github.com/trudenboy/ma-provider-dlna-receiver) player.
+[DLNA Receiver](https://github.com/trudenboy/ma-provider-dlna-receiver) is a
+Music Assistant plugin provider that exposes every connected player as a UPnP
+MediaRenderer, so DLNA apps can cast to Music Assistant.
 Provider created and maintained by [TrudenBoy](https://github.com/TrudenBoy).
 
 

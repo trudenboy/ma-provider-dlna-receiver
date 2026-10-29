@@ -1,0 +1,434 @@
+name: Submit Provider to Upstream
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: "Provider domain to submit"
+        required: true
+        type: choice
+        options:
+          - yandex_music
+          - kion_music
+          - zvuk_music
+          - msx_bridge
+          - web_kiosk
+          - yandex_station
+          - yandex_smarthome
+          - yandex_alice
+          - yandex_ynison
+          - dlna_receiver
+          - fastmcp_server
+          - filesystem_yandex_disk
+      version:
+        description: "Provider release version (e.g. 1.2.0)"
+        required: true
+        type: string
+      reset_branch:
+        description: "Reset branch to upstream/dev (discards manual commits on the branch)"
+        required: false
+        type: boolean
+        default: false
+      pr_summary:
+        description: "Short title tagline (e.g. 'FLAC streaming, Lyrics, rich metadata'). Leave empty to use a generic title."
+        required: false
+        type: string
+        default: ""
+      change_type:
+        description: "Which 'Types of changes' box to tick in the upstream PR template. If a comma-separated legacy value is supplied, only its first value is used. Valid: bugfix, new-feature, enhancement, new-provider, breaking-change, refactor, documentation, maintenance, ci, dependencies. Auto-forced to 'new-provider' on the first submission."
+        required: false
+        type: string
+        default: enhancement
+
+permissions:
+  contents: write
+
+jobs:
+  create-upstream-pr:
+    name: Create/update draft PR to upstream
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Persist the PAT (not the default GITHUB_TOKEN App) as the git
+          # credential: the upstream/<domain> branch is built from upstream/dev,
+          # which carries .github/workflows/*.yml, and a GitHub App token cannot
+          # push refs that touch workflow files. FORK_SYNC_PAT must hold the
+          # `workflow` scope (classic) / Workflows: write (fine-grained).
+          token: ${{ secrets.FORK_SYNC_PAT }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Baseline scripts parse the whole upstream tree. Using the runner's
+          # older system Python silently skips files with newer syntax.
+          python-version-file: .python-version
+
+      - name: Resolve domain and clone provider release
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_PAT }}
+        run: |
+          case "${{ inputs.domain }}" in
+            yandex_music) PROVIDER_REPO="trudenboy/ma-provider-yandex-music"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Music"; UPSTREAM_SHIP_VERSION="true" ;;
+            kion_music) PROVIDER_REPO="trudenboy/ma-provider-kion-music"; PROVIDER_PATH="provider/"; DISPLAY_NAME="KION Music"; UPSTREAM_SHIP_VERSION="true" ;;
+            zvuk_music) PROVIDER_REPO="trudenboy/ma-provider-zvuk-music"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Zvuk Music"; UPSTREAM_SHIP_VERSION="true" ;;
+            msx_bridge) PROVIDER_REPO="trudenboy/ma-provider-msx-bridge"; PROVIDER_PATH="provider/"; DISPLAY_NAME="MSX Bridge"; UPSTREAM_SHIP_VERSION="true" ;;
+            web_kiosk) PROVIDER_REPO="trudenboy/ma-provider-web-kiosk"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Web Kiosk"; UPSTREAM_SHIP_VERSION="true" ;;
+            yandex_station) PROVIDER_REPO="trudenboy/ma-provider-yandex-station"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Station"; UPSTREAM_SHIP_VERSION="true" ;;
+            yandex_smarthome) PROVIDER_REPO="trudenboy/ma-provider-yandex-smarthome"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Smart Home"; UPSTREAM_SHIP_VERSION="true" ;;
+            yandex_alice) PROVIDER_REPO="trudenboy/ma-provider-yandex-alice"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Alice"; UPSTREAM_SHIP_VERSION="true" ;;
+            yandex_ynison) PROVIDER_REPO="trudenboy/ma-provider-yandex-ynison"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Music Connect (Ynison)"; UPSTREAM_SHIP_VERSION="true" ;;
+            dlna_receiver) PROVIDER_REPO="trudenboy/ma-provider-dlna-receiver"; PROVIDER_PATH="provider/"; DISPLAY_NAME="DLNA Receiver"; UPSTREAM_SHIP_VERSION="true" ;;
+            fastmcp_server) PROVIDER_REPO="trudenboy/ma-provider-mcp"; PROVIDER_PATH="provider/"; DISPLAY_NAME="FastMCP Server"; UPSTREAM_SHIP_VERSION="true" ;;
+            filesystem_yandex_disk) PROVIDER_REPO="trudenboy/ma-provider-yandex-disk"; PROVIDER_PATH="provider/"; DISPLAY_NAME="Yandex Disk"; UPSTREAM_SHIP_VERSION="false" ;;
+            *) echo "Unknown domain: ${{ inputs.domain }}"; exit 1 ;;
+          esac
+          echo "PROVIDER_REPO=$PROVIDER_REPO" >> $GITHUB_ENV
+          echo "PROVIDER_PATH=$PROVIDER_PATH" >> $GITHUB_ENV
+          echo "DISPLAY_NAME=$DISPLAY_NAME" >> $GITHUB_ENV
+          echo "UPSTREAM_SHIP_VERSION=$UPSTREAM_SHIP_VERSION" >> $GITHUB_ENV
+
+          gh repo clone "$PROVIDER_REPO" provider-repo -- \
+            --depth 1 --branch "v${{ inputs.version }}"
+
+          # Compare base: the highest published stable release below the one
+          # being submitted. The releases listing puts drafts first and is not
+          # version-ordered, so stale drafts (e.g. an old v1.0.0) must not win.
+          CURRENT_TAG="v${{ inputs.version }}"
+          PREV_TAG=$( { gh api --paginate "repos/${PROVIDER_REPO}/releases?per_page=100" \
+            --jq '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' 2>/dev/null || true; \
+            printf '%s\n' "$CURRENT_TAG"; } \
+            | sort -uV | grep -x -B1 -F "$CURRENT_TAG" | grep -vxF "$CURRENT_TAG" || true)
+          echo "PREV_TAG=$PREV_TAG" >> $GITHUB_ENV
+
+      - name: Prepare upstream/<domain> branch and create/update draft PR
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/music-assistant/server.git
+          git fetch upstream dev
+
+          DOMAIN="${{ inputs.domain }}"
+          VERSION="v${{ inputs.version }}"
+          # Branch name has no version — one branch/PR per domain, updated on each run
+          BRANCH="upstream/${DOMAIN}"
+
+          BRANCH_EXISTS=$(git ls-remote --heads origin "$BRANCH" | grep -q . && echo "yes" || echo "no")
+
+          if [[ "${{ inputs.reset_branch }}" == "true" || "$BRANCH_EXISTS" == "no" ]]; then
+            echo "Creating/resetting branch from upstream/dev"
+            git checkout -B "$BRANCH" upstream/dev
+            FORCE_PUSH="--force"
+          else
+            echo "Branch exists — updating provider files on top of existing commits"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+            FORCE_PUSH=""
+          fi
+
+          DEST="music_assistant/providers/${DOMAIN}"
+          mkdir -p "$DEST"
+          rsync -av --delete "provider-repo/${PROVIDER_PATH}" "$DEST/"
+
+          if [ -d "provider-repo/tests" ]; then
+            mkdir -p "tests/providers/${DOMAIN}"
+            # Standalone-only tests never go upstream: test_docs.py checks the
+            # provider repo's own CLAUDE/docs files (leaking it failed upstream
+            # pytest on yandex_ynison PR #4827), and tests/standalone/ holds
+            # project-metadata/setup-script tests (reviewer objection on
+            # music-assistant/server#5605). Keep in lockstep with
+            # reusable-sync-to-fork.yml (tests/test_test_export_excludes.py).
+            rsync -av --delete --exclude='test_docs.py' --exclude='standalone/' provider-repo/tests/ "tests/providers/${DOMAIN}/"
+
+            NEW_PKG="music_assistant.providers.${DOMAIN}"
+            # Rewrite every shape of `provider`-as-import the provider repos
+            # actually use. Earlier revisions of this wrapper only covered the
+            # dotted-submodule form, so bare `from provider import X`,
+            # multi-line `from provider import (…)`, `import provider.X`,
+            # `import provider as X` and `"provider"` mock-patch strings
+            # slipped through and surfaced upstream as `ModuleNotFoundError:
+            # No module named 'provider'`. Each pattern below pins one of
+            # those shapes; together they should leave no `\bprovider\b`
+            # import-context occurrence behind.
+            find "tests/providers/${DOMAIN}/" -name '*.py' -exec sed -i \
+              -e "s/\\bfrom provider\\./from ${NEW_PKG}./g" \
+              -e "s/\\bfrom provider import\\b/from ${NEW_PKG} import/g" \
+              -e "s/\\bimport provider\\./import ${NEW_PKG}./g" \
+              -e "s/\\bimport provider\\(\\s\\+as\\s\\)/import ${NEW_PKG}\\1/g" \
+              -e "s/\\bimport provider\$/import ${NEW_PKG}/g" \
+              -e "s/\"provider\\./\"${NEW_PKG}./g" \
+              -e "s/'provider\\./'${NEW_PKG}./g" \
+              {} +
+          fi
+
+          # Reconcile the synced provider source AND tests with upstream's lint
+          # config before committing. The provider repo mirrors upstream *main*
+          # (which enforces D212 — multi-line docstring summary on the first
+          # line); a PR that targets *dev* — which enforces the incompatible
+          # D213, summary on the second line — would otherwise fail the upstream
+          # `lint` job on every multi-line docstring, plus any other rule dev
+          # enforces that main does not. ruff is deterministic, so running its
+          # autofix + format here reproduces upstream's own pre-commit edits in
+          # place. This also restores the isort ordering and noqa wrapping the
+          # `provider.`->dotted-package rewrite above can disturb (otherwise the
+          # upstream format pass shifts trailing `# noqa` markers and ruff then
+          # strips them as RUF100, exposing the underlying violation). The full
+          # check subsumes the previous tests-only `--select I` import-sort;
+          # `--unsafe-fixes` covers the D213 / RUF012 class of fixes. ``pipx``
+          # is preinstalled on ubuntu-latest and side-steps PEP 668.
+          # Match upstream's pinned ruff exactly so this fix/format pass is
+          # byte-identical to the upstream `lint` job — a different ruff version
+          # resolves rules like D213 differently, and upstream's ruff-check then
+          # re-finds violations on our committed output. Upstream's ruff hooks run
+          # `uv run ruff` against the `ruff==X.Y.Z` pin in its own pyproject.toml,
+          # so read the version from there (NOT .pre-commit-config — upstream uses
+          # system hooks, not astral-sh/ruff-pre-commit). Fall back to latest only
+          # if it can't be parsed.
+          RUFF_REQ=$(grep -oE 'ruff==[0-9]+\.[0-9]+\.[0-9]+' pyproject.toml | head -1)
+          pipx install --quiet "${RUFF_REQ:-ruff}" || pipx install --quiet ruff || true
+          RUFF_TARGETS="$DEST"
+          [ -d "tests/providers/${DOMAIN}" ] && RUFF_TARGETS="$RUFF_TARGETS tests/providers/${DOMAIN}"
+          ruff check --fix --unsafe-fixes $RUFF_TARGETS || true
+          ruff format $RUFF_TARGETS || true
+
+          # Copy VERSION file alongside manifest so the badge cron can read it
+          # from this branch / from the upstream tree after the PR merges.
+          # Built-in MA providers don't ship one; a provider whose upstream
+          # reviewers object sets `upstream_exclude_version: true` in
+          # providers.yml. The rsync --delete above already dropped any copy
+          # an earlier submission shipped.
+          if [ "${UPSTREAM_SHIP_VERSION:-true}" = "true" ] && [ -f provider-repo/VERSION ]; then
+            cp provider-repo/VERSION "music_assistant/providers/${DOMAIN}/VERSION"
+          fi
+
+          # Regenerate requirements_all.txt from the manifests so a
+          # requirements change in the synced manifest.json actually reaches
+          # upstream CI. Without this, the branch keeps the pre-sync pin and
+          # the upstream test env installs a stale version of the dependency
+          # (import errors at collection; mypy sees the module as untyped).
+          # The generator deduplicates first-pin-wins across ALL inlined
+          # manifests, so also verify this provider's own requirements
+          # survived: a sibling provider pinning a different version of the
+          # same package silently overrides ours and ships a broken branch —
+          # fail loudly with guidance instead.
+          if [ -f scripts/gen_requirements_all.py ]; then
+            python3 scripts/gen_requirements_all.py
+            python3 - "$DEST/manifest.json" << 'REQCHECK'
+          import json
+          import re
+          import sys
+
+          wanted = json.load(open(sys.argv[1])).get("requirements", [])
+          have = open("requirements_all.txt").read().splitlines()
+
+          def base(spec):
+              return re.split(r"[\[=<>~!]", spec, 1)[0].strip().lower()
+
+          missing = [req for req in wanted if req not in have]
+          if missing:
+              print(
+                  "::error::requirements_all.txt lost this provider's pin(s) "
+                  "to a conflicting sibling manifest (dedup is first-pin-wins):"
+              )
+              for req in missing:
+                  clashes = [line for line in have if base(line) == base(req)]
+                  print(
+                      f"::error::  manifest wants '{req}' but requirements_all.txt "
+                      f"carries {clashes or 'no entry'} — align the sibling "
+                      "providers' manifests on one version of the package"
+                  )
+              sys.exit(1)
+          REQCHECK
+          fi
+
+          # Regenerate the Lokalise English source (translations/en.json) from the
+          # synced strings.json so upstream's build_translations_source pre-commit
+          # hook finds no diff. Without this, the provider's strings.json reaches
+          # upstream but en.json still reflects the previous state, and the hook
+          # rewrites it during the upstream `lint` job → failure. The script reads
+          # the strings.json files directly (only needs orjson, no MA runtime), so
+          # install just that and run it with plain python to avoid a full uv sync.
+          if [ -f scripts/build_translations.py ]; then
+            python3 -m pip install --quiet --break-system-packages orjson 2>/dev/null \
+              || python3 -m pip install --quiet orjson 2>/dev/null || true
+            python3 -m scripts.build_translations \
+              || python3 scripts/build_translations.py || true
+          fi
+
+          # Remove the cloned provider-repo dir before staging to avoid adding it as a submodule
+          rm -rf provider-repo
+
+          git add -A
+          # Decide against upstream/dev, not against the branch HEAD: the
+          # provider pipeline's sync-upstream job usually pushes the release to
+          # upstream/<domain> before this workflow runs, so the staged diff is
+          # empty even though upstream still needs the PR (issue #181).
+          if git diff --cached --quiet upstream/dev -- "$DEST" "tests/providers/${DOMAIN}"; then
+            echo "${DOMAIN} ${VERSION} already matches upstream/dev — nothing to submit"
+            exit 0
+          fi
+          NEEDS_COMMIT="yes"
+          if git diff --cached --quiet; then
+            echo "${BRANCH} already contains ${DOMAIN} ${VERSION} — skipping commit, creating/updating the PR"
+            NEEDS_COMMIT="no"
+          fi
+
+          # Generate PR title
+          PR_SUMMARY="${{ inputs.pr_summary }}"
+          if [[ -z "$PREV_TAG" ]]; then
+            PR_TITLE="Add ${DISPLAY_NAME} provider ${VERSION}"
+          else
+            PR_TITLE="Update ${DISPLAY_NAME} provider to ${VERSION}"
+          fi
+          if [[ -n "$PR_SUMMARY" ]]; then
+            PR_TITLE+=": ${PR_SUMMARY}"
+          fi
+
+          # Get changelog data from GitHub API
+          COMPARE_LABEL="initial"
+          WHAT_NEW="_No feat/fix commits found_"
+          FILES_SECTION="_No provider/tests files changed_"
+
+          if [[ -n "$PREV_TAG" ]]; then
+            COMPARE_LABEL="vs ${PREV_TAG}"
+            # Conventional Commits allow a scope and a breaking-change marker:
+            # `fix(scope): …`, `feat!: …`, `feat(scope)!: …` (issue #182).
+            WHAT_NEW=$(gh api "repos/${PROVIDER_REPO}/compare/${PREV_TAG}...${VERSION}" \
+              --jq '.commits[].commit.message | split("\n")[0] | select(test("^(feat|fix)(\\([^)]*\\))?!?:")) | "- " + .' \
+              2>/dev/null || true)
+            [[ -z "$WHAT_NEW" ]] && WHAT_NEW="_No feat/fix commits found_"
+            FILE_ROWS=$(gh api "repos/${PROVIDER_REPO}/compare/${PREV_TAG}...${VERSION}" \
+              --jq '[.files[] | select(.filename | startswith("provider/") or startswith("tests/")) | "| `" + .filename + "` | " + .status + " | +" + (.additions|tostring) + "/-" + (.deletions|tostring) + " |"] | join("\n")' \
+              2>/dev/null || true)
+            if [[ -n "$FILE_ROWS" ]]; then
+              FILES_SECTION='| File | Status | Changes |'$'\n''|------|--------|---------|'$'\n'"${FILE_ROWS}"
+            fi
+          fi
+
+          # Carry HUMAN co-author credit across the squash boundary. The sync
+          # commit is a single bot commit, so upstream history would otherwise
+          # lose contributor credit that lives in the provider repo's commits
+          # (observed on music-assistant/server#4833). Collect Co-authored-by
+          # trailers from the synced commit range, drop AI-agent / bot trailers
+          # and unconfigured placeholder identities (RFC 2606 example domains)
+          # (per AI_POLICY those stay in the provider repo), normalize the
+          # trailer key casing, and dedupe preserving first-seen order.
+          HUMAN_COAUTHORS=""
+          if [[ -n "$PREV_TAG" ]]; then
+            HUMAN_COAUTHORS=$(gh api "repos/${PROVIDER_REPO}/compare/${PREV_TAG}...${VERSION}" \
+              --jq '.commits[].commit.message | split("\n")[] | select(test("^[Cc]o-[Aa]uthored-[Bb]y:"))' \
+              2>/dev/null \
+              | tr -d '\r' \
+              | sed -E 's/^[Cc]o-[Aa]uthored-[Bb]y:[[:space:]]*/Co-authored-by: /' \
+              | grep -Eiv '@anthropic\.com|@cursor\.com|@openai\.com|\[bot\]|github-actions|copilot|claude|opencode|aider|devin|@example\.(com|org|net)>' \
+              | awk '!seen[$0]++' \
+              || true)
+          fi
+
+          # Determine which "Types of changes" box gets ticked. Upstream accepts exactly
+          # one; retain compatibility with legacy comma-separated input by taking the first.
+          # First-time submission (no PREV_TAG) → always "new-provider".
+          CHANGE_TYPES="${{ inputs.change_type }}"
+          if [[ -z "$PREV_TAG" ]]; then
+            CHANGE_TYPES="new-provider"
+          fi
+          CHANGE_TYPE=$(printf '%s' "$CHANGE_TYPES" \
+            | tr -d ' ' | tr '[:upper:]' '[:lower:]' | cut -d, -f1)
+          tick() { [[ "$CHANGE_TYPE" == "$1" ]] && printf 'x' || printf ' '; }
+
+          # Build PR body in the structure required by upstream PULL_REQUEST_TEMPLATE.md
+          # so that .github/workflows/pr-labels.yaml can derive the label and the
+          # release-notes generator can slot the change correctly. The provider-specific
+          # detail lives inside the "What does this implement/fix?" section.
+          PR_BODY="# What does this implement/fix?"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="## ${DISPLAY_NAME} provider ${VERSION}"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="**Source**: [${PROVIDER_REPO}](https://github.com/${PROVIDER_REPO}) · tag [${VERSION}](https://github.com/${PROVIDER_REPO}/releases/tag/${VERSION})"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="### What's new (${COMPARE_LABEL})"
+          PR_BODY+=$'\n\n'"${WHAT_NEW}"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="### Changed files (${COMPARE_LABEL})"
+          PR_BODY+=$'\n\n'"${FILES_SECTION}"
+          if [[ -n "$HUMAN_COAUTHORS" ]]; then
+            PR_BODY+=$'\n\n'"### Credits"
+            PR_BODY+=$'\n\n'"Changes in this range co-authored by:"$'\n'
+            PR_BODY+="$(printf '%s\n' "$HUMAN_COAUTHORS" | sed -E 's/^Co-authored-by:[[:space:]]*/- /')"
+          fi
+          PR_BODY+=$'\n\n'
+          PR_BODY+="**Related issue (if applicable):**"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="- N/A"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="## Types of changes"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="- [$(tick bugfix)] Bugfix (non-breaking change which fixes an issue) — \`bugfix\`"$'\n'
+          PR_BODY+="- [$(tick new-feature)] New feature (non-breaking change which adds functionality) — \`new-feature\`"$'\n'
+          PR_BODY+="- [$(tick enhancement)] Enhancement to an existing feature — \`enhancement\`"$'\n'
+          PR_BODY+="- [$(tick new-provider)] New music/player/metadata/plugin provider — \`new-provider\`"$'\n'
+          PR_BODY+="- [$(tick breaking-change)] Breaking change (fix or feature that would cause existing functionality to not work as expected) — \`breaking-change\`"$'\n'
+          PR_BODY+="- [$(tick refactor)] Refactor (no behaviour change) — \`refactor\`"$'\n'
+          PR_BODY+="- [$(tick documentation)] Documentation only — \`documentation\`"$'\n'
+          PR_BODY+="- [$(tick maintenance)] Maintenance / chore — \`maintenance\`"$'\n'
+          PR_BODY+="- [$(tick ci)] CI / workflow change — \`ci\`"$'\n'
+          PR_BODY+="- [$(tick dependencies)] Dependencies bump — \`dependencies\`"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="## Checklist"
+          PR_BODY+=$'\n\n'
+          PR_BODY+="- [x] The code change is tested and works locally."$'\n'
+          PR_BODY+="- [x] \`pre-commit run --all-files\` passes."$'\n'
+          PR_BODY+="- [x] \`pytest\` passes, and tests have been added/updated under \`tests/\` where applicable."$'\n'
+          PR_BODY+="- [ ] For changes to shared models, the companion PR in \`music-assistant/models\` is linked."$'\n'
+          PR_BODY+="- [ ] For changes affecting the UI, the companion PR in \`music-assistant/frontend\` is linked."$'\n'
+          PR_BODY+="- [x] I have read and complied with the project's [AI Policy](https://github.com/music-assistant/.github/blob/main/AI_POLICY.md) for any AI-assisted contributions."
+
+          # Defense-in-depth: strip AI co-author trailers from PR_BODY in case
+          # they ever leak in via WHAT_NEW expansion. Single-line filter; safe
+          # no-op when no such lines exist.
+          PR_BODY="$(printf '%s\n' "$PR_BODY" | sed -E '/^[Cc]o-[Aa]uthored-[Bb]y: .*(Claude|claude|@anthropic\.com).*$/d')"
+
+          # Strip the same trailers from the commit message before we commit.
+          # The current PR_TITLE is single-line so this is also a no-op today;
+          # kept as a guardrail against future multi-line PR_TITLE changes.
+          COMMIT_MSG="$(printf '%s\n' "$PR_TITLE" | sed -E '/^[Cc]o-[Aa]uthored-[Bb]y: .*(Claude|claude|@anthropic\.com).*$/d')"
+          # Append the (pre-filtered) human co-author trailers so GitHub's
+          # squash merge upstream carries the credit into server history.
+          if [[ "$NEEDS_COMMIT" == "yes" ]]; then
+            if [[ -n "$HUMAN_COAUTHORS" ]]; then
+              git commit -m "$COMMIT_MSG" -m "$HUMAN_COAUTHORS"
+            else
+              git commit -m "$COMMIT_MSG"
+            fi
+            git push origin "$BRANCH" $FORCE_PUSH
+          fi
+
+          EXISTING_PR=$(gh api "repos/music-assistant/server/pulls" \
+            -X GET -f state=open -f head="trudenboy:${BRANCH}" \
+            --jq '.[0].number // ""' 2>/dev/null || true)
+
+          if [[ -n "$EXISTING_PR" ]]; then
+            echo "PR #${EXISTING_PR} already exists — updating title and body"
+            gh api "repos/music-assistant/server/pulls/${EXISTING_PR}" \
+              -X PATCH \
+              -f title="$PR_TITLE" \
+              -f body="$PR_BODY"
+          else
+            gh pr create \
+              --draft \
+              --repo music-assistant/server \
+              --head "trudenboy:${BRANCH}" \
+              --base dev \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY"
+          fi
+
+  rebuild-integration:
+    name: Rebuild integration/pending-upstream
+    needs: create-upstream-pr
+    uses: ./.github/workflows/rebuild-integration.yml
+    secrets: inherit

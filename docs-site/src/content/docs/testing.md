@@ -20,15 +20,19 @@ uv run pytest tests/ -v --cov=provider/ --cov-report=term-missing
 
 ## CI Pipeline
 
-Every push and pull request triggers two parallel jobs via `test.yml`:
+`test.yml` runs the reusable `ma-provider-tools` test workflow on pull requests
+and weekly. Pushes to `dev` run the same gate through `pipeline.yml` before any
+release or fork sync.
 
-| Job | What it does |
-|-----|-------------|
-| `test-*` | Runs pytest with coverage, uploads report to Codecov |
-| `lint-*` | Runs ruff, mypy, codespell, pre-commit |
+| Check | What it does |
+|-------|-------------|
+| pytest | Runs the full suite against the installed Music Assistant package |
+| ruff | Lint and format check |
+| mypy | Strict type check of `provider/` and `tests/` |
+| codespell / pre-commit | Repository hygiene and upstream rule gates |
 
-
-Tests run against `trudenboy/ma-server@dev` (plugin-enabled fork — full CI with ruff + mypy).
+There is no Codecov upload in this repository; coverage is reported in the job
+log and can be generated locally as shown below.
 
 
 ## Tools
@@ -39,7 +43,6 @@ Tests run against `trudenboy/ma-server@dev` (plugin-enabled fork — full CI wit
 | `Python 3.14` | Target Python version |
 | `pytest` | Test framework |
 | `pytest-cov` | Coverage collection |
-| `Codecov` | Coverage report upload (automatic in CI) |
 | `ruff` | Python linter and formatter |
 | `mypy` | Static type checker |
 | `codespell` | Spell-checking for source code |
@@ -68,8 +71,7 @@ uv run ruff format --check provider/
 
 ## Coverage
 
-Coverage reports are automatically uploaded to Codecov on every CI push.
-To view coverage locally:
+Coverage is printed in the CI job log. To view it locally:
 
 ```bash
 uv run pytest tests/ --cov=provider/ --cov-report=html

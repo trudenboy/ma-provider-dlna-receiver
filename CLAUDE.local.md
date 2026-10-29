@@ -17,8 +17,10 @@ External apps send audio via standard DLNA protocol; MA routes it to any player.
 
 1. **Discovery**: SSDP advertises MediaRenderer → control point finds it
 2. **SetAVTransportURI**: CP sends stream URL → stored in renderer state
-3. **Play**: Provider creates `PluginSource`, calls `play_plugin_source()` on target
-4. **Audio proxy**: `get_audio_stream()` fetches URL via aiohttp, yields chunks to MA pipeline
+3. **Play**: Provider routes the renderer's `AudioSource` through `play_media()` on the bound player
+4. **Ownership**: `on_source_selected` claims the exclusive source; Stop/Pause are rejected once the claim is gone
+5. **Audio proxy**: `get_audio_stream()` fetches URL via aiohttp, yields chunks to MA pipeline
+6. **Volume sync**: RenderingControl reads the bound player's volume/mute and `PLAYER_UPDATED` events push changes to GENA subscribers
 
 ## Build & test
 
@@ -46,8 +48,11 @@ Uses `ma-provider-tools` wrapper workflows (ruff + mypy via trudenboy/ma-server 
 - UPnP eventing (SUBSCRIBE/NOTIFY) is implemented in `eventing.py` via one
   `EventingManager` per UPnP service; NOTIFY dispatch runs as tracked
   background tasks and shares a single `aiohttp.ClientSession`
-- The SCPD XMLs are minimal stubs; full state variable tables would improve
-  compatibility with strict control points
+- The SCPD XMLs are full service descriptions and are cached once at module
+  import; do not re-read them per renderer
+- `connected_players` (from `music_assistant.helpers.config_entries`) scopes
+  renderers to playback-capable players; `get_player_audio_sources()` must stay
+  in sync with the renderer registry
 - Incoming DLNA URIs are validated (`http`/`https` only); the audio proxy in
   `get_audio_stream` has per-chunk read and connect timeouts and logs a
   redacted URL to avoid leaking userinfo credentials

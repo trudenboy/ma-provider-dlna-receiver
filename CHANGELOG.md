@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0] - 2026-10-29
+
+### Changed
+
+- Player selection now uses Music Assistant's connected-player model; the previous target-player selection must be made again after upgrading.
+- Each Music Assistant player now sees only the receiver source bound to that player, and display, light and source-only clients no longer receive renderers.
+
+### Removed
+
+- Headerless `audio/L16` is no longer advertised, because ffmpeg cannot probe that format from an unknown stream.
+
+### Fixed
+
+- Sender volume and mute controls now report the bound player's real state instead of a fixed default.
+- A late Stop or Pause from a sender no longer affects playback owned by another source, and failed player commands return a UPnP error.
+- UPnP event notifications now use the standard metadata namespaces, so namespace-aware control points process volume and transport updates.
+- UPnP service descriptions are loaded once per process instead of once per renderer.
+
 ## [1.2.8] - 2026-10-13
 
 ### Fixed
